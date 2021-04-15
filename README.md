@@ -23,6 +23,8 @@ handling (an event occuring on the intersection of two existing arcs, essentiall
 
 To-do:
 - Bound voroni diagram
+- Optimize memory usage by reducing dynamic memory allocation for static indexed memory
+- Transition to smart pointers
 - Write function to determine water cells
 - Map diagram to elevations
 - Write river pathing
