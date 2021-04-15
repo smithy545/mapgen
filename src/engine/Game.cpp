@@ -20,9 +20,6 @@ static int screen_height;
 static bool resized = false;
 State Game::state;
 
-bool y_sort(glm::vec2 v1, glm::vec2 v2) {
-    return v1.y < v2.y || (v1.y == v2.y && v1.x < v2.x);
-}
 
 void key_cb(GLFWwindow *window, int key, int scancode, int action, int mods) {
     switch (action) {
@@ -154,8 +151,7 @@ void Game::init_world() {
     for (auto s: sites)
         sitehashes.insert(FortuneAlgorithm::site_key(s));
 
-    int n = 100; // num sites
-    for (int i = 0; i < n; i++) {
+    for (int i = 0; i < 10000; i++) {
         glm::vec2 v;
         do
             v = glm::vec2(rd() % static_cast<int>(screen_width), rd() % static_cast<int>(screen_height));
@@ -164,13 +160,13 @@ void Game::init_world() {
         //std::cout << FortuneAlgorithm::site_key(v) << ", ";
         sites.push_back(v);
     }
-    std::sort(sites.begin(), sites.end(), y_sort);
+    std::sort(sites.begin(), sites.end(), FortuneAlgorithm::voroni_sort);
     std::cout << "\nInput sites generated." << std::endl;
     auto dt = std::chrono::system_clock::now().time_since_epoch();
     FortuneAlgorithm diagram(sites);
-    auto voroni = diagram.construct(false);
+    auto voroni = diagram.construct(screen_width, screen_height, false);
     dt = std::chrono::system_clock::now().time_since_epoch() - dt;
-    std::cout << "Generated voroni diagram from " << n << " sites in "
+    std::cout << "Generated voroni diagram from " << sites.size() << " sites in "
               << std::chrono::duration_cast<std::chrono::milliseconds>(dt).count() << " ms with "
               << voroni.edges.size() << " edges" << std::endl;
 
@@ -214,7 +210,6 @@ bool Game::update() {
     for (auto s: sites)
         sitehashes.insert(FortuneAlgorithm::site_key(s));
     for(auto & site : sites) {
-        float x,y;
         sitehashes.erase(FortuneAlgorithm::site_key(site));
         do {
             site.x = site.x + (rd() % 11) - 5;
@@ -223,15 +218,7 @@ bool Game::update() {
         sitehashes.insert(FortuneAlgorithm::site_key(site));
     }
     FortuneAlgorithm diagram(sites);
-    auto voroni = diagram.construct(1600, 1200,false);
-    auto success{true};
-    if(false && FortuneAlgorithm::check_for_edge_intersections(voroni.edges)) {
-        std::cout << "Dumping input sites: " << std::endl;
-        for(auto site: sites) {
-            std::cout << FortuneAlgorithm::site_key(site) << "," << std::endl;
-        }
-        success = false;
-    }
+    auto voroni = diagram.construct(false);
     // site mesh
     std::vector<glm::vec3> site_verts;
     std::vector<glm::vec3> site_colors;
@@ -261,5 +248,5 @@ bool Game::update() {
             Scene::InstanceList{edge_mesh, "edges", instances, Scene::InstanceList::LINES}
     };
     renderer.load_scene(scene);
-    return success;
+    return true;
 }

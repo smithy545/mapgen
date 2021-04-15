@@ -18,13 +18,14 @@ class FortuneAlgorithm {
 public:
     typedef std::pair<glm::vec2, glm::vec2> Edge;
 
+    struct Event;
+
     struct HalfEdge {
         glm::vec2 origin;
         glm::vec2 destination;
         HalfEdge *prev, *next;
     };
 
-    struct Event;
     struct Arc {
         glm::vec2 focus;
         HalfEdge *prev_edge, *next_edge;
@@ -138,7 +139,9 @@ public:
 
     Diagram construct(bool validate_diagram = true); // no bounds, only return internal edges
 
-    Diagram construct(int width, int height, bool validate_diagram = true, int x_offset = 0, int y_offset = 0);
+    Diagram construct(double width, double height, bool validate_diagram = true, double x_offset = 0.0, double y_offset = 0.0);
+
+    static bool voroni_sort(glm::vec2 v1, glm::vec2 v2);
 
     static bool check_for_edge_intersections(std::vector<FortuneAlgorithm::Edge> edges);
 
