@@ -34,6 +34,7 @@ FortuneAlgorithm::~FortuneAlgorithm() {
 }
 
 Diagram FortuneAlgorithm::construct(bool validate_diagram) {
+    Diagram voroni;
     auto initial_event = events.pop();
     beachline.set_root(initial_event->position);
     while (!events.empty()) {
@@ -41,6 +42,7 @@ Diagram FortuneAlgorithm::construct(bool validate_diagram) {
         sweep_y = event->y;
         switch (event->type) {
             case Event::SITE:
+                voroni.faces.emplace_back(event->position);
                 handle_site(event);
                 break;
             case Event::CIRCLE:
@@ -50,7 +52,6 @@ Diagram FortuneAlgorithm::construct(bool validate_diagram) {
     }
 
     // ignore unfinished half edges
-    Diagram voroni;
     std::unordered_set<std::string> edge_set;
     for(auto [site, cell]: cells) {
         auto original_handle = cell.handle;
@@ -71,6 +72,7 @@ Diagram FortuneAlgorithm::construct(bool validate_diagram) {
 }
 
 Diagram FortuneAlgorithm::construct(double width, double height, bool validate_diagram, double x_offset, double y_offset) {
+    Diagram voroni;
     auto initial_event = events.pop();
     beachline.set_root(initial_event->position);
     while (!events.empty()) {
@@ -78,6 +80,7 @@ Diagram FortuneAlgorithm::construct(double width, double height, bool validate_d
         sweep_y = event->y;
         switch (event->type) {
             case Event::SITE:
+                voroni.faces.emplace_back(event->position);
                 handle_site(event);
                 break;
             case Event::CIRCLE:
@@ -87,22 +90,33 @@ Diagram FortuneAlgorithm::construct(double width, double height, bool validate_d
     }
 
     // cut off half edges outside boundary and extend edges within boundary to edge if necessary
-    Diagram voroni;
-    std::unordered_set<std::string> edge_set;
+    std::unordered_map<std::string, unsigned int> output_edges;
     utils::math::rect bounds{x_offset, y_offset, width, height};
-    for(auto [site, cell]: cells) {
+    for(int face_index = 0; face_index < voroni.faces.size(); face_index++) {
+        auto face = voroni.faces[face_index];
+        auto cell = cells[site_key(face.site)];
         auto original_handle = cell.handle;
         auto handle = original_handle;
         do {
-            if(!edge_set.contains(edge_key(handle->destination, handle->origin)) &&
-            (utils::math::in_rect(handle->origin, bounds)
-            || utils::math::in_rect(handle->destination, bounds)
-            || utils::math::do_intersect(handle->origin, handle->destination, {x_offset, y_offset}, {x_offset+width, y_offset})
-            || utils::math::do_intersect(handle->origin, handle->destination, {x_offset+width, y_offset}, {x_offset+width, y_offset+height})
-            || utils::math::do_intersect(handle->origin, handle->destination, {x_offset+width, y_offset+height}, {x_offset, y_offset+height})
-            || utils::math::do_intersect(handle->origin, handle->destination, {x_offset, y_offset+height}, {x_offset, y_offset}))) {
-                edge_set.insert(edge_key(handle->origin, handle->destination));
-                voroni.edges.emplace_back(handle->origin, handle->destination);
+            auto ek = edge_key(handle->destination, handle->origin);
+            if(!output_edges.contains(ek)) {
+                if (utils::math::in_rect(handle->origin, bounds)
+                    || utils::math::in_rect(handle->destination, bounds)
+                    || utils::math::do_intersect(handle->origin, handle->destination, {x_offset, y_offset},
+                                                 {x_offset + width, y_offset})
+                    || utils::math::do_intersect(handle->origin, handle->destination, {x_offset + width, y_offset},
+                                                 {x_offset + width, y_offset + height})
+                    || utils::math::do_intersect(handle->origin, handle->destination,
+                                                 {x_offset + width, y_offset + height}, {x_offset, y_offset + height})
+                    || utils::math::do_intersect(handle->origin, handle->destination, {x_offset, y_offset + height},
+                                                 {x_offset, y_offset})) {
+                    output_edges[edge_key(handle->origin, handle->destination)] = face_index;
+                    voroni.edges.emplace_back(handle->origin, handle->destination);
+                }
+            } else {
+                auto neighbor_index = output_edges[ek];
+                face.neighbors.push_back(neighbor_index);
+                voroni.faces[neighbor_index].neighbors.push_back(face_index);
             }
             handle = handle->next;
         } while(handle != nullptr && handle != original_handle);

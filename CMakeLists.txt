@@ -43,5 +43,4 @@ add_executable(mapgen
         src/engine/State.cpp
         src/engine/State.h
         src/pathing/data.h
-        src/pathing/Diagram.cpp
         src/pathing/Diagram.h)

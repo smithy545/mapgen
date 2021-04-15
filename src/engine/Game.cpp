@@ -151,7 +151,7 @@ void Game::init_world() {
     for (auto s: sites)
         sitehashes.insert(FortuneAlgorithm::site_key(s));
 
-    for (int i = 0; i < 10000; i++) {
+    for (int i = 0; i < 1000; i++) {
         glm::vec2 v;
         do
             v = glm::vec2(rd() % screen_width, rd() % screen_height);
@@ -189,6 +189,16 @@ void Game::init_world() {
         indices.push_back(indices.size());
         verts.emplace_back(edge.second.x,  edge.second.y, 0);
         colors.emplace_back(0, 0, 1);
+        indices.push_back(indices.size());
+    }
+
+    auto delauney = voroni.dual();
+    for (auto edge: delauney.edges) {
+        verts.emplace_back(edge.first.x, edge.first.y, 0);
+        colors.emplace_back(1, 1, 0);
+        indices.push_back(indices.size());
+        verts.emplace_back(edge.second.x,  edge.second.y, 0);
+        colors.emplace_back(1, 1, 0);
         indices.push_back(indices.size());
     }
     Scene scene;
