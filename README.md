@@ -18,7 +18,7 @@ https://jacquesheunis.com/post/fortunes-algorithm/
 
 https://github.com/jacquesh/fortunes-algorithm
 
-It extends on these implementations with "parallel arc line" (three adjacent arcs with equal y-coords) handling and "seam"
+It extends on these implementations with "parallel arc line" handling (three adjacent arcs with equal y-coords) and "seam"
 handling (an event occuring on the intersection of two existing arcs, essentially a combined circle/site event).
 
 To-do:
