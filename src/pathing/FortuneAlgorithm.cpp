@@ -57,8 +57,8 @@ Diagram FortuneAlgorithm::construct(bool validate_diagram) {
         auto original_handle = cell.handle;
         auto handle = original_handle;
         do {
-            if(!edge_set.contains(edge_key(handle->destination, handle->origin))) {
-                edge_set.insert(edge_key(handle->origin, handle->destination));
+            if(!edge_set.contains(Diagram::edge_key(handle->destination, handle->origin))) {
+                edge_set.insert(Diagram::edge_key(handle->origin, handle->destination));
                 voroni.edges.emplace_back(handle->origin, handle->destination);
             }
             handle = handle->next;
@@ -94,11 +94,14 @@ Diagram FortuneAlgorithm::construct(double width, double height, bool validate_d
     utils::math::rect bounds{x_offset, y_offset, width, height};
     for(int face_index = 0; face_index < voroni.faces.size(); face_index++) {
         auto face = voroni.faces[face_index];
-        auto cell = cells[site_key(face.site)];
+        auto sk = Diagram::site_key(face.site);
+        if(!cells.contains(sk))
+            continue;
+        auto cell = cells[sk];
         auto original_handle = cell.handle;
         auto handle = original_handle;
         do {
-            auto ek = edge_key(handle->destination, handle->origin);
+            auto ek = Diagram::edge_key(handle->destination, handle->origin);
             if(!output_edges.contains(ek)) {
                 if (utils::math::in_rect(handle->origin, bounds)
                     || utils::math::in_rect(handle->destination, bounds)
@@ -110,7 +113,7 @@ Diagram FortuneAlgorithm::construct(double width, double height, bool validate_d
                                                  {x_offset + width, y_offset + height}, {x_offset, y_offset + height})
                     || utils::math::do_intersect(handle->origin, handle->destination, {x_offset, y_offset + height},
                                                  {x_offset, y_offset})) {
-                    output_edges[edge_key(handle->origin, handle->destination)] = face_index;
+                    output_edges[Diagram::edge_key(handle->origin, handle->destination)] = face_index;
                     voroni.edges.emplace_back(handle->origin, handle->destination);
                 }
             } else {
@@ -306,17 +309,7 @@ glm::vec2 FortuneAlgorithm::compute_center(glm::vec2 left, glm::vec2 middle, glm
     return 0.5f * (left + middle) + t * v1;
 }
 
-std::string FortuneAlgorithm::site_key(glm::vec2 site, bool plain) {
-    if(plain)
-        return fmt::format("{},{}", (int)site.x, (int)site.y);
-    return fmt::format("glm::vec2({},{})", (int)site.x, (int)site.y);
-}
-
-std::string FortuneAlgorithm::edge_key(glm::vec2 origin, glm::vec2 destination) {
-    return fmt::format("{}, {} | {}, {}", origin.x, origin.y, destination.x, destination.y);
-}
-
-bool FortuneAlgorithm::check_for_edge_intersections(std::vector<FortuneAlgorithm::Edge> edges) {
+bool FortuneAlgorithm::check_for_edge_intersections(std::vector<Diagram::Edge> edges) {
     for(int i = 0; i < edges.size() - 1; i++) {
         for(int j = i + 1; j < edges.size(); j++) {
             if(edges[i].first.y >= 0 && edges[i].second.y >= 0 && edges[j].first.y >= 0 && edges[j].second.y >= 0
@@ -327,8 +320,8 @@ bool FortuneAlgorithm::check_for_edge_intersections(std::vector<FortuneAlgorithm
                && glm::length(edges[i].second - edges[j].second) > 2.0
                && utils::math::do_intersect(edges[i].first, edges[i].second, edges[j].first, edges[j].second)) {
                 std::cout << "Error detected between the following edges" << std::endl;
-                std::cout << edge_key(edges[i].first, edges[i].second) << std::endl;
-                std::cout << edge_key(edges[j].first, edges[j].second) << std::endl;
+                std::cout << Diagram::edge_key(edges[i].first, edges[i].second) << std::endl;
+                std::cout << Diagram::edge_key(edges[j].first, edges[j].second) << std::endl;
                 return true;
             }
         }
@@ -341,7 +334,7 @@ bool FortuneAlgorithm::voroni_sort(glm::vec2 v1, glm::vec2 v2) {
 }
 
 void FortuneAlgorithm::generate_cell(glm::vec2 site, FortuneAlgorithm::HalfEdge *edge_handle) {
-    auto sk = site_key(site);
+    auto sk = Diagram::site_key(site);
     if(!cells.contains(sk))
         cells[sk] = Cell{edge_handle};
 }
@@ -667,10 +660,10 @@ void FortuneAlgorithm::Beachline::print() {
     while(!is_nil(itr->prev))
         itr = itr->prev;
     while(!is_nil(itr->next)) {
-        std::cout << site_key(itr->focus, true) << " - ";
+        std::cout << Diagram::site_key(itr->focus, true) << " - ";
         itr = itr->next;
     }
-    std::cout << site_key(itr->focus, true) << std::endl;
+    std::cout << Diagram::site_key(itr->focus, true) << std::endl;
 }
 
 // EventQueue methods

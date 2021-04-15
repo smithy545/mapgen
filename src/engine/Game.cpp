@@ -12,6 +12,7 @@
 #include <unordered_set>
 #include <vector>
 
+#include "pathing/Diagram.h"
 #include "pathing/FortuneAlgorithm.h"
 
 
@@ -149,15 +150,15 @@ void Game::init_world() {
     std::random_device rd;
     std::unordered_set<std::string> sitehashes;
     for (auto s: sites)
-        sitehashes.insert(FortuneAlgorithm::site_key(s));
+        sitehashes.insert(Diagram::site_key(s));
 
-    for (int i = 0; i < 1000; i++) {
+    for (int i = 0; i < 10000; i++) {
         glm::vec2 v;
         do
             v = glm::vec2(rd() % screen_width, rd() % screen_height);
-        while (sitehashes.contains(FortuneAlgorithm::site_key(v)));
-        sitehashes.insert(FortuneAlgorithm::site_key(v));
-        //std::cout << FortuneAlgorithm::site_key(v) << ", ";
+        while (sitehashes.contains(Diagram::site_key(v)));
+        sitehashes.insert(Diagram::site_key(v));
+        //std::cout << Diagram::site_key(v) << ", ";
         sites.push_back(v);
     }
     std::sort(sites.begin(), sites.end(), FortuneAlgorithm::voroni_sort);
@@ -178,7 +179,8 @@ void Game::init_world() {
     std::vector<glm::vec3> verts;
     std::vector<glm::vec3> colors;
     std::vector<unsigned int> indices;
-    for (auto site: sites) {
+    for (const auto& face: voroni.faces) {
+        auto site = face.site;
         site_verts.emplace_back(site.x, site.y, 0);
         site_colors.emplace_back(1, 0, 0);
         site_indices.push_back(site_indices.size());
@@ -191,8 +193,12 @@ void Game::init_world() {
         colors.emplace_back(0, 0, 1);
         indices.push_back(indices.size());
     }
-
+    dt = std::chrono::system_clock::now().time_since_epoch();
     auto delauney = voroni.dual();
+    dt = std::chrono::system_clock::now().time_since_epoch() - dt;
+    std::cout << "Generated delauney triangulation in "
+              << std::chrono::duration_cast<std::chrono::milliseconds>(dt).count() << " ms with "
+              << delauney.edges.size() << " edges and " << delauney.faces.size() << " sites" << std::endl;
     for (auto edge: delauney.edges) {
         verts.emplace_back(edge.first.x, edge.first.y, 0);
         colors.emplace_back(1, 1, 0);
@@ -218,14 +224,14 @@ bool Game::update() {
     std::vector<glm::mat4> instances{glm::mat4(1)};
     std::unordered_set<std::string> sitehashes;
     for (auto s: sites)
-        sitehashes.insert(FortuneAlgorithm::site_key(s));
+        sitehashes.insert(Diagram::site_key(s));
     for(auto & site : sites) {
-        sitehashes.erase(FortuneAlgorithm::site_key(site));
+        sitehashes.erase(Diagram::site_key(site));
         do {
             site.x = site.x + (rd() % 11) - 5;
             site.y = site.y + (rd() % 11) - 5;
-        } while(sitehashes.contains(FortuneAlgorithm::site_key(site)));
-        sitehashes.insert(FortuneAlgorithm::site_key(site));
+        } while(sitehashes.contains(Diagram::site_key(site)));
+        sitehashes.insert(Diagram::site_key(site));
     }
     FortuneAlgorithm diagram(sites);
     auto voroni = diagram.construct(false);

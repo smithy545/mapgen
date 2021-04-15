@@ -5,7 +5,9 @@
 #ifndef MAPGEN_DIAGRAM_H
 #define MAPGEN_DIAGRAM_H
 
+#include <fmt/format.h>
 #include <glm/glm.hpp>
+#include <unordered_set>
 #include <utility>
 #include <vector>
 
@@ -24,38 +26,33 @@ struct Diagram {
     std::vector<Edge> edges;
     std::vector<Face> faces;
 
+    static std::string edge_key(glm::vec2 origin, glm::vec2 destination) {
+        return fmt::format("{}, {} | {}, {}", origin.x, origin.y, destination.x, destination.y);
+    }
+
+    static std::string site_key(glm::vec2 site, bool plain = true) {
+        if(plain)
+            return fmt::format("{},{}", (int)site.x, (int)site.y);
+        return fmt::format("glm::vec2({},{})", (int)site.x, (int)site.y);
+    }
+
     // Convert from Voroni to Delauney or Delauney to Voroni
     Diagram dual() {
         Diagram diagram;
-
         for(const auto& edge: edges) {
-            unsigned int index = diagram.faces.size() - 1;
-            auto found{false};
-            for(auto f: diagram.faces) {
-                if(f.site == edge.first) {
-                    f.neighbors.emplace_back(index + 1);
-                    found = true;
-                    break;
-                }
-            }
-            if(!found)
-                diagram.faces.emplace_back(edge.first, std::vector<unsigned int>{index + 1});
-            index++;
-            found = false;
-            for(auto f: diagram.faces) {
-                if(f.site == edge.first) {
-                    f.neighbors.emplace_back(index - 1);
-                    found = true;
-                    break;
-                }
-            }
-            if(!found)
-                diagram.faces.emplace_back(edge.second, std::vector<unsigned int>{index - 1});
+            unsigned int index = diagram.faces.size();
+            diagram.faces.emplace_back(edge.first, std::vector<unsigned int>{index + 1});
+            diagram.faces.emplace_back(edge.second, std::vector<unsigned int>{index});
         }
-        for(const auto& face: faces) {
+        std::unordered_set<unsigned int> added_faces;
+        for(int index = 0; index < faces.size(); index++) {
+            auto face = faces[index];
             for(auto neighbor: face.neighbors) {
-                diagram.edges.emplace_back(face.site, faces[neighbor].site);
+                if(!added_faces.contains(neighbor)) {
+                    diagram.edges.emplace_back(face.site, faces[neighbor].site);
+                }
             }
+            added_faces.insert(index);
         }
 
         return diagram;
