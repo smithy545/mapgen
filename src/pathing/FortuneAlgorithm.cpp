@@ -5,7 +5,6 @@
 #include "FortuneAlgorithm.h"
 
 #include <cfloat>
-#include <fmt/format.h>
 #include <iostream>
 #include <limits>
 #include <unordered_set>
@@ -52,14 +51,24 @@ Diagram FortuneAlgorithm::construct(bool validate_diagram) {
     }
 
     // ignore unfinished half edges
-    std::unordered_set<std::string> edge_set;
-    for(auto [site, cell]: cells) {
+    std::unordered_map<std::string, unsigned int> output_edges;
+    for(int face_index = 0; face_index < voroni.faces.size(); face_index++) {
+        auto face = voroni.faces[face_index];
+        auto sk = Diagram::site_key(face.site);
+        if(!cells.contains(sk))
+            continue;
+        auto cell = cells[sk];
         auto original_handle = cell.handle;
         auto handle = original_handle;
         do {
-            if(!edge_set.contains(Diagram::edge_key(handle->destination, handle->origin))) {
-                edge_set.insert(Diagram::edge_key(handle->origin, handle->destination));
+            auto ek = Diagram::edge_key(handle->destination, handle->origin);
+            if(!output_edges.contains(ek)) {
+                output_edges[Diagram::edge_key(handle->origin, handle->destination)] = face_index;
                 voroni.edges.emplace_back(handle->origin, handle->destination);
+            } else {
+                auto neighbor_index = output_edges[ek];
+                face.neighbors.push_back(neighbor_index);
+                voroni.faces[neighbor_index].neighbors.push_back(face_index);
             }
             handle = handle->next;
         } while(handle != nullptr && handle != original_handle);
@@ -314,10 +323,10 @@ bool FortuneAlgorithm::check_for_edge_intersections(std::vector<Diagram::Edge> e
         for(int j = i + 1; j < edges.size(); j++) {
             if(edges[i].first.y >= 0 && edges[i].second.y >= 0 && edges[j].first.y >= 0 && edges[j].second.y >= 0
                && edges[i].first.x >= 0 && edges[i].second.x >= 0 && edges[j].first.x >= 0 && edges[j].second.x >= 0
-               && glm::length(edges[i].first - edges[j].first) > 2.0
-               && glm::length(edges[i].first - edges[j].second) > 2.0
-               && glm::length(edges[i].second - edges[j].first) > 2.0
-               && glm::length(edges[i].second - edges[j].second) > 2.0
+               && glm::length(edges[i].first - edges[j].first) > 3.0
+               && glm::length(edges[i].first - edges[j].second) > 3.0
+               && glm::length(edges[i].second - edges[j].first) > 3.0
+               && glm::length(edges[i].second - edges[j].second) > 3.0
                && utils::math::do_intersect(edges[i].first, edges[i].second, edges[j].first, edges[j].second)) {
                 std::cout << "Error detected between the following edges" << std::endl;
                 std::cout << Diagram::edge_key(edges[i].first, edges[i].second) << std::endl;

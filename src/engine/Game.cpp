@@ -151,7 +151,6 @@ void Game::init_world() {
     std::unordered_set<std::string> sitehashes;
     for (auto s: sites)
         sitehashes.insert(Diagram::site_key(s));
-
     for (int i = 0; i < 10000; i++) {
         glm::vec2 v;
         do
@@ -165,12 +164,11 @@ void Game::init_world() {
     std::cout << "\nInput sites generated." << std::endl;
     auto dt = std::chrono::system_clock::now().time_since_epoch();
     FortuneAlgorithm diagram(sites);
-    auto voroni = diagram.construct(screen_width, screen_height, false);
+    auto voroni = diagram.construct(false);
     dt = std::chrono::system_clock::now().time_since_epoch() - dt;
     std::cout << "Generated voroni diagram from " << sites.size() << " sites in "
               << std::chrono::duration_cast<std::chrono::milliseconds>(dt).count() << " ms with "
               << voroni.edges.size() << " edges" << std::endl;
-
     // site mesh
     std::vector<glm::vec3> site_verts;
     std::vector<glm::vec3> site_colors;

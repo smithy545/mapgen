@@ -135,7 +135,7 @@ public:
 
     ~FortuneAlgorithm();
 
-    Diagram construct(bool validate_diagram = true); // no bounds, only return internal edges
+    Diagram construct(bool validate_diagram = true);
 
     Diagram construct(double width, double height, bool validate_diagram = true, double x_offset = 0.0, double y_offset = 0.0);
 

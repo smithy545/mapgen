@@ -37,7 +37,7 @@ struct Diagram {
     }
 
     // Convert from Voroni to Delauney or Delauney to Voroni
-    Diagram dual() {
+    Diagram dual() const {
         Diagram diagram;
         for(const auto& edge: edges) {
             unsigned int index = diagram.faces.size();
