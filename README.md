@@ -5,10 +5,15 @@ WIP
 A C++ version of the redblobgames Mapgen4 (https://www.redblobgames.com/maps/mapgen4/)
 
 Fortune's algorithm implementation generation heavily on the blogs and code samples published by Pierre Vigier:
+
 https://pvigier.github.io/2018/11/18/fortune-algorithm-details.html
+
 https://github.com/pvigier/FortuneAlgorithm
+
 and Jaque Huenis:
+
 https://jacquesheunis.com/post/fortunes-algorithm/
+
 https://github.com/jacquesh/fortunes-algorithm
 
 It extends on these implementations with "parallel arc line" (three adjacent arcs with equal y-coords) handling and "seam"
