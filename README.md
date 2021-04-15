@@ -49,6 +49,17 @@ https://github.com/smithy545/utils
 - Code cleanup (lol)
 
 #### Done so far
-- Generate Voroni diagram from random set of input sites (no duplicate inputs) without overlapping edges for up to 100000 points
-- Generate the dual of a given diagram (Voroni -> Delauney -> Voroni etc.)
+
+- Can generate Voroni diagram from random set of input sites (no duplicate inputs) without overlapping edges for up to 100000 points
+
+    - Basic method to check for edge collisions in debugging. Need to improve precision.
+    - Very rare bugs seem to occur around N >= 100,000 with edge overlap. Memory management also becomes an issue at that point.
+
+- Can generate the dual of a given diagram (Voroni Diagram -> Delauney Triangulation -> Voroni etc.)
+
 - Basic renderer/input handling/game loop for displaying and updating Voroni Diagram in 2d (ortho) or 3d (perspective)
+
+    - Renderer built on OpenGl
+    - OpenGlMathematics (GLM) used for most math functions
+    - Window and input system built on GLEW
+    - String formatting and json libraries included for my utility lib
