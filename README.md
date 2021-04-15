@@ -17,7 +17,7 @@ https://jacquesheunis.com/post/fortunes-algorithm/
 https://github.com/jacquesh/fortunes-algorithm
 
 It extends on these implementations with "parallel arc line" (three adjacent arcs with equal y-coords) handling and "seam"
-handling (an edge event occuring on the intersection of two existing arcs, essentially a combined circle/site event).
+handling (an event occuring on the intersection of two existing arcs, essentially a combined circle/site event).
 
 To-do:
 - Bound voroni diagram
