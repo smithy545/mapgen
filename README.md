@@ -4,7 +4,7 @@ WIP
 
 A C++ version of the redblobgames Mapgen4 (https://www.redblobgames.com/maps/mapgen4/)
 
-Fortune's algorithm implementation generation heavily on the blogs and code samples published by Pierre Vigier:
+Fortune's algorithm implementation heavily on the blogs and code samples published by Pierre Vigier:
 
 https://pvigier.github.io/2018/11/18/fortune-algorithm-details.html
 
