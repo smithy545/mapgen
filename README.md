@@ -5,7 +5,7 @@ WIP
 A C++ version of the redblobgames Mapgen4 (https://www.redblobgames.com/maps/mapgen4/)
 
 #### References
-Fortune's algorithm implementation heavily on the blogs and code samples published by Pierre Vigier:
+Fortune's algorithm implementation heavily on the blog articles and code samples published by Pierre Vigier:
 
 https://pvigier.github.io/2018/11/18/fortune-algorithm-details.html
 
@@ -18,7 +18,7 @@ https://jacquesheunis.com/post/fortunes-algorithm/
 https://github.com/jacquesh/fortunes-algorithm
 
 It extends on these implementations with "parallel arc line" handling (three adjacent arcs with equal y-coords) and "seam"
-handling (an event occuring on the intersection of two existing arcs, essentially a combined circle/site event).
+handling (an event occurring on the intersection of two existing arcs, essentially a combined circle/site event).
 
 #### Installation
 External libs not included but references to source websites are in CMakeLists.txt. Currently built in Windows.
@@ -47,3 +47,8 @@ https://github.com/smithy545/utils
 - Write vegetation generation
 - Wind?
 - Code cleanup (lol)
+
+#### Done so far
+- Generate Voroni diagram from random set of input sites (no duplicate inputs) without overlapping edges for up to 100000 points
+- Generate the dual of a given diagram (Voroni -> Delauney -> Voroni etc.)
+- Basic renderer/input handling/game loop for displaying and updating Voroni Diagram in 2d (ortho) or 3d (perspective)
