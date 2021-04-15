@@ -407,7 +407,7 @@ void FortuneAlgorithm::Beachline::insert_after(Arc *parent, Arc *child) {
 }
 
 void FortuneAlgorithm::Beachline::insert_fixup(Arc *x) {
-    // Reference: Intro to Algorithms by Cormen, LeiserSon, Rivest, Stein: page 316 RB-INSERT-FIXUP
+    // Reference: Introduction to Algorithms by Cormen, Leiserson, Rivest, Stein: page 316 RB-INSERT-FIXUP
     while (x->parent->color == Arc::RED) {
         if (x->parent == x->parent->parent->left) {
             auto y = x->parent->parent->right;
@@ -447,7 +447,7 @@ void FortuneAlgorithm::Beachline::insert_fixup(Arc *x) {
 }
 
 void FortuneAlgorithm::Beachline::delete_from(Arc *z) {
-    // Reference: Intro to Algorithms by Cormen, LeiserSon, Rivest, Stein: page 324 RB-DELETE
+    // Reference: Introduction to Algorithms by Cormen, Leiserson, Rivest, Stein: page 324 RB-DELETE
     auto y = z;
     auto y_original_color = y->color;
     Arc *x;
@@ -482,7 +482,7 @@ void FortuneAlgorithm::Beachline::delete_from(Arc *z) {
 }
 
 void FortuneAlgorithm::Beachline::delete_fixup(Arc *x) {
-    // Reference: Intro to Algorithms by Cormen, LeiserSon, Rivest, Stein: page 326 RB-DELETE-FIXUP
+    // Reference: Introduction to Algorithms by Cormen, Leiserson, Rivest, Stein: page 326 RB-DELETE-FIXUP
     while (x != root && x->color == Arc::BLACK) {
         if (x == x->parent->left) {
             auto w = x->parent->right;
@@ -556,7 +556,7 @@ void FortuneAlgorithm::Beachline::replace(FortuneAlgorithm::Arc *old, FortuneAlg
 }
 
 void FortuneAlgorithm::Beachline::left_rotate(Arc *x) {
-    // Reference: Intro to Algorithms by Cormen, LeiserSon, Rivest, Stein: page 312 LEFT-ROTATE
+    // Reference: Introduction to Algorithms by Cormen, Leiserson, Rivest, Stein: page 312 LEFT-ROTATE
     auto y = x->right;
     x->right = y->left;
     if (!is_nil(y->left))
@@ -573,7 +573,7 @@ void FortuneAlgorithm::Beachline::left_rotate(Arc *x) {
 }
 
 void FortuneAlgorithm::Beachline::right_rotate(Arc *x) {
-    // Reference: Intro to Algorithms by Cormen, LeiserSon, Rivest, Stein: page 312 LEFT-ROTATE
+    // Reference: Introduction to Algorithms by Cormen, Leiserson, Rivest, Stein: page 312 LEFT-ROTATE
     auto y = x->left;
     x->left = y->right;
     if (!is_nil(y->right))
@@ -590,7 +590,7 @@ void FortuneAlgorithm::Beachline::right_rotate(Arc *x) {
 }
 
 void FortuneAlgorithm::Beachline::transplant(Arc *old, Arc *rep) {
-    // Reference: Intro to Algorithms by Cormen, LeiserSon, Rivest, Stein: page 296 TRANSPLANT
+    // Reference: Introduction to Algorithms by Cormen, Leiserson, Rivest, Stein: page 296 TRANSPLANT
     if (is_nil(old->parent))
         root = rep;
     else if (old == old->parent->left)
@@ -601,7 +601,7 @@ void FortuneAlgorithm::Beachline::transplant(Arc *old, Arc *rep) {
 }
 
 FortuneAlgorithm::Arc *FortuneAlgorithm::Beachline::minimum(Arc *x) {
-    // Reference: Intro to Algorithms by Cormen, LeiserSon, Rivest, Stein: page 291 TREE-MINIMUM
+    // Reference: Introduction to Algorithms by Cormen, Leiserson, Rivest, Stein: page 291 TREE-MINIMUM
     while (!is_nil(x->left))
         x = x->left;
     return x;

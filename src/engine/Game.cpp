@@ -154,7 +154,7 @@ void Game::init_world() {
     for (int i = 0; i < 10000; i++) {
         glm::vec2 v;
         do
-            v = glm::vec2(rd() % static_cast<int>(screen_width), rd() % static_cast<int>(screen_height));
+            v = glm::vec2(rd() % screen_width, rd() % screen_height);
         while (sitehashes.contains(FortuneAlgorithm::site_key(v)));
         sitehashes.insert(FortuneAlgorithm::site_key(v));
         //std::cout << FortuneAlgorithm::site_key(v) << ", ";

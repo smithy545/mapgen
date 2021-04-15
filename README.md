@@ -1,6 +1,8 @@
-## Mapgen C++
+# Mapgen C++
 
 WIP
+
+External libs not included but references to source websites are in CMakeLists.txt. Currently built in Windows.
 
 A C++ version of the redblobgames Mapgen4 (https://www.redblobgames.com/maps/mapgen4/)
 

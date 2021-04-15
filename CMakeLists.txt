@@ -7,12 +7,12 @@ find_package(OpenGL REQUIRED)
 set(GLFW_BUILD_DOCS OFF CACHE BOOL "" FORCE)
 set(GLFW_BUILD_TESTS OFF CACHE BOOL "" FORCE)
 set(GLFW_BUILD_EXAMPLES OFF CACHE BOOL "" FORCE)
-add_subdirectory(external/glfw)
-add_subdirectory(external/glew)
-add_subdirectory(external/fmt)
-add_subdirectory(external/json)
-add_subdirectory(external/json-schema-validator)
-add_subdirectory(external/utils)
+add_subdirectory(external/glfw) # https://www.glfw.org/
+add_subdirectory(external/glew) # http://glew.sourceforge.net/
+add_subdirectory(external/fmt)  # https://github.com/fmtlib/fmt
+add_subdirectory(external/json) # https://github.com/nlohmann/json
+add_subdirectory(external/json-schema-validator) # https://github.com/pboettch/json-schema-validator
+add_subdirectory(external/utils) # https://github.com/smithy545/utils
 
 include_directories(
         src
