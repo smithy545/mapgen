@@ -39,7 +39,7 @@ https://github.com/smithy545/utils
 
 #### Todo
 - Bound voroni diagram
-- Optimize memory usage by reducing dynamic memory allocation for static indexed memory
+- Optimize memory usage by replacing/reducing dynamic memory allocation where possible
 - Transition to smart pointers
 - Write function to determine water cells
 - Map diagram to elevations
@@ -53,7 +53,7 @@ https://github.com/smithy545/utils
 - Can generate Voroni diagram from random set of input sites (no duplicate inputs) without overlapping edges for up to 100000 points
 
     - Basic method to check for edge collisions in debugging. Need to improve precision.
-    - Very rare bugs seem to occur around N >= 100,000 with edge overlap. Memory management also becomes an issue at that point.
+    - Rare bugs seem to occur around N >= 100,000 with edge overlap. Memory management also becomes an issue at that point.
 
 - Can generate the dual of a given diagram (Voroni Diagram -> Delauney Triangulation -> Voroni etc.)
 
