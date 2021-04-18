@@ -6,7 +6,6 @@
 
 #include <cfloat>
 #include <delaunator-header-only.hpp>
-#include <iostream>
 #include <limits>
 #include <unordered_set>
 
@@ -35,6 +34,7 @@ FortuneAlgorithm::~FortuneAlgorithm() {
 
 Diagram FortuneAlgorithm::construct(bool validate_diagram) {
     Diagram voroni;
+    /*
     auto initial_event = events.pop();
     beachline.set_root(initial_event->position);
     while (!events.empty()) {
@@ -79,11 +79,13 @@ Diagram FortuneAlgorithm::construct(bool validate_diagram) {
     if(validate_diagram && check_for_edge_intersections(voroni.get_edges()))
         throw "Edge intersection found. Voroni diagram invalid.";
 
+     */
     return voroni;
 }
 
 Diagram FortuneAlgorithm::construct(double width, double height, bool validate_diagram, double x_offset, double y_offset) {
     Diagram voroni;
+    /*
     auto initial_event = events.pop();
     beachline.set_root(initial_event->position);
     while (!events.empty()) {
@@ -144,41 +146,54 @@ Diagram FortuneAlgorithm::construct(double width, double height, bool validate_d
     if(validate_diagram && check_for_edge_intersections(voroni.get_edges()))
         throw "Edge intersection found. Voroni diagram invalid.";
 
+     */
     return voroni;
 }
 
-Diagram FortuneAlgorithm::construct_via_delaunator(const std::vector<glm::vec2>& sites) {
+Diagram FortuneAlgorithm::construct(const std::vector<double>& coords) {
     Diagram voroni;
-    std::vector<double> data;
-    for(auto site: sites) {
-        data.push_back(site.x);
-        data.push_back(site.y);
-    }
-    delaunator::Delaunator constructed(data);
-    for(std::size_t i = 0; i < constructed.triangles.size(); i++) {
-        glm::vec2 p1(constructed.coords[2 * constructed.triangles[i]], constructed.coords[2 * constructed.triangles[i] + 1]);
+    delaunator::Delaunator d(coords);
+    std::unordered_map<std::string, unsigned int> added_faces;
+    std::unordered_map<unsigned int, glm::vec2> hull;
+    for(std::size_t i = 0; i < d.triangles.size(); i++) {
+        auto j = d.halfedges[i];
         auto i0 = i - (i%3);
         auto c1 = FortuneAlgorithm::compute_center(
-                glm::vec2(constructed.coords[2 * constructed.triangles[i0]], constructed.coords[2 * constructed.triangles[i0] + 1]),
-                glm::vec2(constructed.coords[2 * constructed.triangles[i0+1]], constructed.coords[2 * constructed.triangles[i0+1] + 1]),
-                glm::vec2(constructed.coords[2 * constructed.triangles[i0+2]], constructed.coords[2 * constructed.triangles[i0+2] + 1])
+        glm::vec2(d.coords[2 * d.triangles[i0]], d.coords[2 * d.triangles[i0] + 1]),
+        glm::vec2(d.coords[2 * d.triangles[i0 + 1]], d.coords[2 * d.triangles[i0 + 1] + 1]),
+        glm::vec2(d.coords[2 * d.triangles[i0 + 2]], d.coords[2 * d.triangles[i0 + 2] + 1])
         );
-        voroni.add_face(p1, {});
-        auto j = constructed.halfedges[i];
+        glm::vec2 site(d.coords[2 * d.triangles[i]], d.coords[2 * d.triangles[i] + 1]);
+        auto k = Diagram::site_key(site);
+        if(!added_faces.contains(k))
+            added_faces[k] = voroni.add_face(site);
         if(j != delaunator::INVALID_INDEX) {
             if(i > j) {
                 auto j0 = j - (j%3);
+                auto p2 = glm::vec2(d.coords[2 * d.triangles[j]], d.coords[2 * d.triangles[j] + 1]);
                 auto c2 = FortuneAlgorithm::compute_center(
-                        glm::vec2(constructed.coords[2 * constructed.triangles[j0]], constructed.coords[2 * constructed.triangles[j0] + 1]),
-                        glm::vec2(constructed.coords[2 * constructed.triangles[j0+1]], constructed.coords[2 * constructed.triangles[j0+1] + 1]),
-                        glm::vec2(constructed.coords[2 * constructed.triangles[j0+2]], constructed.coords[2 * constructed.triangles[j0+2] + 1])
+                glm::vec2(d.coords[2 * d.triangles[j0]], d.coords[2 * d.triangles[j0] + 1]),
+                glm::vec2(d.coords[2 * d.triangles[j0 + 1]], d.coords[2 * d.triangles[j0 + 1] + 1]),
+                glm::vec2(d.coords[2 * d.triangles[j0 + 2]], d.coords[2 * d.triangles[j0 + 2] + 1])
                 );
-                voroni.add_edge(c1, c2);
+                voroni.add_edge(c1, c2, added_faces[k], added_faces[Diagram::site_key(p2)]);
             }
-        } else
-            j = (i % 3 == 2) ? i - 2 : i + 1;
-        voroni.add_neighbor(i, j);
+        } else // store hull points for handling later
+            hull[d.triangles[i]] = c1;
     }
+    // add hull connections in the form of "duplicated point" edges
+    for(auto [i, c]: hull) {
+        auto i1 = d.hull_tri[i];
+        auto i2 = d.hull_tri[d.hull_next[i]];
+        auto p1 = glm::vec2(d.coords[2 * d.triangles[i1]], d.coords[2 * d.triangles[i1] + 1]);
+        auto p2 = glm::vec2(d.coords[2 * d.triangles[i2]], d.coords[2 * d.triangles[i2] + 1]);
+        auto k1 = Diagram::site_key(p1);
+        auto k2 = Diagram::site_key(p2);
+        voroni.add_to_hull(added_faces[k1]);
+        voroni.add_to_hull(added_faces[k2]);
+        voroni.add_edge(c, c, added_faces[k1], added_faces[k2]);
+    }
+
     return voroni;
 }
 
@@ -372,10 +387,6 @@ bool FortuneAlgorithm::check_for_edge_intersections(std::vector<Diagram::Edge> e
         }
     }
     return false;
-}
-
-bool FortuneAlgorithm::voroni_sort(glm::vec2 v1, glm::vec2 v2) {
-    return v1.y < v2.y || (v1.y == v2.y && v1.x < v2.x);
 }
 
 void FortuneAlgorithm::generate_cell(glm::vec2 site, FortuneAlgorithm::HalfEdge *edge_handle) {

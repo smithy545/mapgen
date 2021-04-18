@@ -139,9 +139,7 @@ public:
 
     Diagram construct(double width, double height, bool validate_diagram = true, double x_offset = 0.0, double y_offset = 0.0);
 
-    static Diagram construct_via_delaunator(const std::vector<glm::vec2>& sites);
-
-    static bool voroni_sort(glm::vec2 v1, glm::vec2 v2);
+    static Diagram construct(const std::vector<double>& coords);
 
     static bool check_for_edge_intersections(std::vector<Diagram::Edge> edges);
 

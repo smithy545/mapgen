@@ -15,11 +15,15 @@ class Terrain {
 public:
     Terrain(unsigned int num_sites, int width, int height, bool centered = false);
 
-    Scene::Mesh get_terrain_mesh();
+    Scene::Mesh get_terrain_mesh() const;
 
-    // underlying voroni/delauney diagrams
-    VAR_GET(Diagram, base, public);
-    VAR_GET(Diagram, dual, public);
+    Scene::Mesh get_site_mesh() const;
+private:
+    Scene::Mesh mesh, mesh2;
+
+// underlying voroni/delauney diagrams
+VAR_GET(Diagram, base, public);
+VAR_GET(Diagram, dual, public);
 };
 
 #endif //CIVILWAR_TERRAIN_H
