@@ -8,7 +8,6 @@
 #include <mapgen/FortuneAlgorithm.h>
 #include <random>
 #include <string>
-#include <unordered_set>
 #include <vector>
 
 
@@ -35,38 +34,50 @@ Terrain::Terrain(unsigned int num_sites, int width, int height, bool centered) {
     m_dual = m_base.dual();
 
     // assign cell types
+    for(auto index: m_base.get_hull())
+        assign_ocean(index, 3);
 
     // assign elevations
+    for(int i = 0; i < m_base.get_faces().size(); i++) {
+        if(!ocean.contains(i))
+            land.insert(i);
+    }
 
     // generate terrain mesh
-    for (int i = 0; i < m_base.get_faces().size(); i++) {
-        auto face = m_base.get_faces()[i];
+    std::unordered_set<std::string> added_edges;
+    for (auto index: ocean) {
+        auto face = m_base.get_faces()[index];
         auto color = glm::vec3(0,0,1);
         for(auto [neighbor, edge]: face.neighboring_edges) {
-            if(neighbor < i)
-                continue;
             auto e = m_base.get_edges()[edge];
-            mesh.vertices.emplace_back(e.first.x, e.first.y, 0);
-            mesh.colors.push_back(color);
-            mesh.indices.push_back(mesh.indices.size());
-            mesh.vertices.emplace_back(e.second.x, e.second.y, 0);
-            mesh.colors.push_back(color);
-            mesh.indices.push_back(mesh.indices.size());
+            auto ek = Diagram::edge_key(e.first, e.second);
+            if (!added_edges.contains(ek)) {
+                added_edges.insert(ek);
+                mesh.vertices.emplace_back(e.first.x, e.first.y, 0);
+                mesh.colors.push_back(color);
+                mesh.indices.push_back(mesh.indices.size());
+                mesh.vertices.emplace_back(e.second.x, e.second.y, 0);
+                mesh.colors.push_back(color);
+                mesh.indices.push_back(mesh.indices.size());
+            }
         }
     }
-    for (int i = 0; i < m_dual.get_faces().size(); i++) {
-        auto face = m_dual.get_faces()[i];
-        auto color = glm::vec3(1, 1, 0);
+    // generate terrain mesh
+    for (auto index: land) {
+        auto face = m_base.get_faces()[index];
+        auto color = glm::vec3(.6, .3, .1);
         for(auto [neighbor, edge]: face.neighboring_edges) {
-            if(neighbor < i)
-                continue;
-            auto e = m_dual.get_edges()[edge];
-            mesh.vertices.emplace_back(e.first.x, e.first.y, 0);
-            mesh.colors.push_back(color);
-            mesh.indices.push_back(mesh.indices.size());
-            mesh.vertices.emplace_back(e.second.x,  e.second.y, 0);
-            mesh.colors.push_back(color);
-            mesh.indices.push_back(mesh.indices.size());
+            auto e = m_base.get_edges()[edge];
+            auto ek = Diagram::edge_key(e.first, e.second);
+            if (!added_edges.contains(ek)) {
+                added_edges.insert(ek);
+                mesh.vertices.emplace_back(e.first.x, e.first.y, 0);
+                mesh.colors.push_back(color);
+                mesh.indices.push_back(mesh.indices.size());
+                mesh.vertices.emplace_back(e.second.x, e.second.y, 0);
+                mesh.colors.push_back(color);
+                mesh.indices.push_back(mesh.indices.size());
+            }
         }
     }
 }
@@ -84,4 +95,12 @@ Scene::Mesh Terrain::get_site_mesh() const {
         site_mesh.indices.push_back(site_mesh.indices.size());
     }
     return site_mesh;
+}
+
+void Terrain::assign_ocean(unsigned int start, int neighbor_depth) {
+    if(neighbor_depth == 0)
+        return;
+    ocean.insert(start);
+    for(auto [neighbor, edge]: m_base.get_faces()[start].neighboring_edges)
+        assign_ocean(neighbor, neighbor_depth - 1);
 }

@@ -7,7 +7,7 @@
 
 #include <engine/Scene.h>
 #include <mapgen/Diagram.h>
-#include <unordered_map>
+#include <unordered_set>
 #include <utils/macros.h>
 
 
@@ -19,7 +19,11 @@ public:
 
     Scene::Mesh get_site_mesh() const;
 private:
-    Scene::Mesh mesh, mesh2;
+    Scene::Mesh mesh;
+    std::unordered_set<unsigned int> ocean;
+    std::unordered_set<unsigned int> land;
+
+    void assign_ocean(unsigned int start, int neighbor_depth);
 
 // underlying voroni/delauney diagrams
 VAR_GET(Diagram, base, public);
