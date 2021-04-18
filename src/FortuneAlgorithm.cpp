@@ -2,9 +2,10 @@
 // Created by Philip Smith on 9/16/2020.
 //
 
-#include "FortuneAlgorithm.h"
+#include <mapgen/FortuneAlgorithm.h>
 
 #include <cfloat>
+#include <delaunator-header-only.hpp>
 #include <iostream>
 #include <limits>
 #include <unordered_set>
@@ -41,7 +42,7 @@ Diagram FortuneAlgorithm::construct(bool validate_diagram) {
         sweep_y = event->y;
         switch (event->type) {
             case Event::SITE:
-                voroni.faces.emplace_back(event->position);
+                voroni.add_face(event->position);
                 handle_site(event);
                 break;
             case Event::CIRCLE:
@@ -52,8 +53,8 @@ Diagram FortuneAlgorithm::construct(bool validate_diagram) {
 
     // ignore unfinished half edges
     std::unordered_map<std::string, unsigned int> output_edges;
-    for(int face_index = 0; face_index < voroni.faces.size(); face_index++) {
-        auto face = voroni.faces[face_index];
+    int face_index = 0;
+    for(const auto& face: voroni.get_faces()) {
         auto sk = Diagram::site_key(face.site);
         if(!cells.contains(sk))
             continue;
@@ -64,17 +65,18 @@ Diagram FortuneAlgorithm::construct(bool validate_diagram) {
             auto ek = Diagram::edge_key(handle->destination, handle->origin);
             if(!output_edges.contains(ek)) {
                 output_edges[Diagram::edge_key(handle->origin, handle->destination)] = face_index;
-                voroni.edges.emplace_back(handle->origin, handle->destination);
+                voroni.add_edge(handle->origin, handle->destination);
             } else {
                 auto neighbor_index = output_edges[ek];
-                face.neighbors.push_back(neighbor_index);
-                voroni.faces[neighbor_index].neighbors.push_back(face_index);
+                voroni.add_neighbor(face_index, neighbor_index);
+                voroni.add_neighbor(neighbor_index, face_index);
             }
             handle = handle->next;
         } while(handle != nullptr && handle != original_handle);
+        face_index++;
     }
 
-    if(validate_diagram && check_for_edge_intersections(voroni.edges))
+    if(validate_diagram && check_for_edge_intersections(voroni.get_edges()))
         throw "Edge intersection found. Voroni diagram invalid.";
 
     return voroni;
@@ -89,7 +91,7 @@ Diagram FortuneAlgorithm::construct(double width, double height, bool validate_d
         sweep_y = event->y;
         switch (event->type) {
             case Event::SITE:
-                voroni.faces.emplace_back(event->position);
+                voroni.add_face(event->position);
                 handle_site(event);
                 break;
             case Event::CIRCLE:
@@ -101,8 +103,8 @@ Diagram FortuneAlgorithm::construct(double width, double height, bool validate_d
     // cut off half edges outside boundary and extend edges within boundary to edge if necessary
     std::unordered_map<std::string, unsigned int> output_edges;
     utils::math::rect bounds{x_offset, y_offset, width, height};
-    for(int face_index = 0; face_index < voroni.faces.size(); face_index++) {
-        auto face = voroni.faces[face_index];
+    int face_index = 0;
+    for(const auto& face: voroni.get_faces()) {
         auto sk = Diagram::site_key(face.site);
         if(!cells.contains(sk))
             continue;
@@ -113,34 +115,70 @@ Diagram FortuneAlgorithm::construct(double width, double height, bool validate_d
             auto ek = Diagram::edge_key(handle->destination, handle->origin);
             if(!output_edges.contains(ek)) {
                 if (utils::math::in_rect(handle->origin, bounds)
-                    || utils::math::in_rect(handle->destination, bounds)
-                    || utils::math::do_intersect(handle->origin, handle->destination, {x_offset, y_offset},
-                                                 {x_offset + width, y_offset})
-                    || utils::math::do_intersect(handle->origin, handle->destination, {x_offset + width, y_offset},
-                                                 {x_offset + width, y_offset + height})
-                    || utils::math::do_intersect(handle->origin, handle->destination,
-                                                 {x_offset + width, y_offset + height}, {x_offset, y_offset + height})
-                    || utils::math::do_intersect(handle->origin, handle->destination, {x_offset, y_offset + height},
-                                                 {x_offset, y_offset})) {
+                || utils::math::in_rect(handle->destination, bounds)
+                || utils::math::do_intersect(handle->origin, handle->destination,
+                        {x_offset, y_offset},{x_offset + width, y_offset})
+                || utils::math::do_intersect(handle->origin, handle->destination,
+                        {x_offset + width, y_offset},{x_offset + width, y_offset + height})
+                || utils::math::do_intersect(handle->origin, handle->destination,
+                        {x_offset + width, y_offset + height},{x_offset, y_offset + height})
+                || utils::math::do_intersect(handle->origin, handle->destination,
+                        {x_offset, y_offset + height}, {x_offset, y_offset})) {
                     output_edges[Diagram::edge_key(handle->origin, handle->destination)] = face_index;
-                    voroni.edges.emplace_back(handle->origin, handle->destination);
+                    voroni.add_edge(handle->origin, handle->destination);
                 }
             } else {
                 auto neighbor_index = output_edges[ek];
-                face.neighbors.push_back(neighbor_index);
-                voroni.faces[neighbor_index].neighbors.push_back(face_index);
+                voroni.add_neighbor(face_index, neighbor_index);
+                voroni.add_neighbor(neighbor_index, face_index);
             }
             handle = handle->next;
         } while(handle != nullptr && handle != original_handle);
+        face_index++;
     }
-    voroni.edges.emplace_back(glm::vec2{x_offset+1, y_offset+1}, glm::vec2{x_offset+width, y_offset+1});
-    voroni.edges.emplace_back(glm::vec2{x_offset+width, y_offset+1}, glm::vec2{x_offset+width, y_offset+height-1});
-    voroni.edges.emplace_back(glm::vec2{x_offset+width, y_offset+height-1}, glm::vec2{x_offset+1, y_offset+height-1});
-    voroni.edges.emplace_back(glm::vec2{x_offset+1, y_offset+height-1}, glm::vec2{x_offset+1, y_offset+1});
+    voroni.add_edge(glm::vec2{x_offset+1, y_offset}, glm::vec2{x_offset+width, y_offset});
+    voroni.add_edge(glm::vec2{x_offset+width, y_offset}, glm::vec2{x_offset+width, y_offset+height-1});
+    voroni.add_edge(glm::vec2{x_offset+width, y_offset+height-1}, glm::vec2{x_offset+1, y_offset+height-1});
+    voroni.add_edge(glm::vec2{x_offset+1, y_offset+height-1}, glm::vec2{x_offset+1, y_offset});
 
-    if(validate_diagram && check_for_edge_intersections(voroni.edges))
+    if(validate_diagram && check_for_edge_intersections(voroni.get_edges()))
         throw "Edge intersection found. Voroni diagram invalid.";
 
+    return voroni;
+}
+
+Diagram FortuneAlgorithm::construct_via_delaunator(const std::vector<glm::vec2>& sites) {
+    Diagram voroni;
+    std::vector<double> data;
+    for(auto site: sites) {
+        data.push_back(site.x);
+        data.push_back(site.y);
+    }
+    delaunator::Delaunator constructed(data);
+    for(std::size_t i = 0; i < constructed.triangles.size(); i++) {
+        glm::vec2 p1(constructed.coords[2 * constructed.triangles[i]], constructed.coords[2 * constructed.triangles[i] + 1]);
+        auto i0 = i - (i%3);
+        auto c1 = FortuneAlgorithm::compute_center(
+                glm::vec2(constructed.coords[2 * constructed.triangles[i0]], constructed.coords[2 * constructed.triangles[i0] + 1]),
+                glm::vec2(constructed.coords[2 * constructed.triangles[i0+1]], constructed.coords[2 * constructed.triangles[i0+1] + 1]),
+                glm::vec2(constructed.coords[2 * constructed.triangles[i0+2]], constructed.coords[2 * constructed.triangles[i0+2] + 1])
+        );
+        voroni.add_face(p1, {});
+        auto j = constructed.halfedges[i];
+        if(j != delaunator::INVALID_INDEX) {
+            if(i > j) {
+                auto j0 = j - (j%3);
+                auto c2 = FortuneAlgorithm::compute_center(
+                        glm::vec2(constructed.coords[2 * constructed.triangles[j0]], constructed.coords[2 * constructed.triangles[j0] + 1]),
+                        glm::vec2(constructed.coords[2 * constructed.triangles[j0+1]], constructed.coords[2 * constructed.triangles[j0+1] + 1]),
+                        glm::vec2(constructed.coords[2 * constructed.triangles[j0+2]], constructed.coords[2 * constructed.triangles[j0+2] + 1])
+                );
+                voroni.add_edge(c1, c2);
+            }
+        } else
+            j = (i % 3 == 2) ? i - 2 : i + 1;
+        voroni.add_neighbor(i, j);
+    }
     return voroni;
 }
 
@@ -300,34 +338,32 @@ FortuneAlgorithm::HalfEdge *FortuneAlgorithm::create_half_edge(glm::vec2 origin)
     };
 }
 
-glm::vec2 FortuneAlgorithm::compute_edge_origin(glm::vec2 parent, glm::vec2 child) {
-    auto origin = glm::vec2{child.x, utils::math::compute_parabola_y(parent, sweep_y, child.x)};
-    return origin;
+glm::vec2 FortuneAlgorithm::compute_edge_origin(glm::vec2 parent, glm::vec2 child) const {
+    return glm::vec2{child.x, utils::math::compute_parabola_y(parent, sweep_y, child.x)};
 }
 
-glm::vec2 FortuneAlgorithm::compute_center(glm::vec2 left, glm::vec2 middle, glm::vec2 right) {
-    // Reference: https://github.com/pvigier/FortuneAlgorithm/blob/master/src/FortuneAlgorithm.cpp: line 212
-    auto v1 = left - middle;
-    auto v2 = middle - right;
-    // orthogonal to edges
-    v1 = glm::vec2(-v1.y, v1.x);
-    v2 = glm::vec2(-v2.y, v2.x);
-    // half edge
-    auto delta = 0.5f * (right - left);
-    float t = (delta.x * v2.y - delta.y * v2.x) / (v1.x * v2.y - v1.y * v2.x);
-    return 0.5f * (left + middle) + t * v1;
+glm::vec2 FortuneAlgorithm::compute_center(glm::vec2 a, glm::vec2 b, glm::vec2 c) {
+    // Reference: https://mapbox.github.io/delaunator : circumcenter function
+    auto ad = a[0] * a[0] + a[1] * a[1];
+    auto bd = b[0] * b[0] + b[1] * b[1];
+    auto cd = c[0] * c[0] + c[1] * c[1];
+    auto D = 2 * (a[0] * (b[1] - c[1]) + b[0] * (c[1] - a[1]) + c[0] * (a[1] - b[1]));
+    return glm::vec2(
+    1.0 / D * (ad * (b[1] - c[1]) + bd * (c[1] - a[1]) + cd * (a[1] - b[1])),
+    1.0 / D * (ad * (c[0] - b[0]) + bd * (a[0] - c[0]) + cd * (b[0] - a[0]))
+    );
 }
 
 bool FortuneAlgorithm::check_for_edge_intersections(std::vector<Diagram::Edge> edges) {
     for(int i = 0; i < edges.size() - 1; i++) {
         for(int j = i + 1; j < edges.size(); j++) {
             if(edges[i].first.y >= 0 && edges[i].second.y >= 0 && edges[j].first.y >= 0 && edges[j].second.y >= 0
-               && edges[i].first.x >= 0 && edges[i].second.x >= 0 && edges[j].first.x >= 0 && edges[j].second.x >= 0
-               && glm::length(edges[i].first - edges[j].first) > 3.0
-               && glm::length(edges[i].first - edges[j].second) > 3.0
-               && glm::length(edges[i].second - edges[j].first) > 3.0
-               && glm::length(edges[i].second - edges[j].second) > 3.0
-               && utils::math::do_intersect(edges[i].first, edges[i].second, edges[j].first, edges[j].second)) {
+            && edges[i].first.x >= 0 && edges[i].second.x >= 0 && edges[j].first.x >= 0 && edges[j].second.x >= 0
+            && glm::length(edges[i].first - edges[j].first) > 3.0
+            && glm::length(edges[i].first - edges[j].second) > 3.0
+            && glm::length(edges[i].second - edges[j].first) > 3.0
+            && glm::length(edges[i].second - edges[j].second) > 3.0
+            && utils::math::do_intersect(edges[i].first, edges[i].second, edges[j].first, edges[j].second)) {
                 std::cout << "Error detected between the following edges" << std::endl;
                 std::cout << Diagram::edge_key(edges[i].first, edges[i].second) << std::endl;
                 std::cout << Diagram::edge_key(edges[j].first, edges[j].second) << std::endl;

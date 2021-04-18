@@ -7,8 +7,8 @@
 
 #include <glm/glm.hpp>
 #include <unordered_map>
-#include <math_util.h>
 #include <string>
+#include <utils/math_util.h>
 #include <vector>
 
 #include "Diagram.h"
@@ -26,7 +26,7 @@ public:
 
     struct Arc {
         glm::vec2 focus;
-        HalfEdge *prev_edge, *next_edge;
+        HalfEdge *prev_edge{nullptr}, *next_edge{nullptr};
         Arc *parent;
         Arc *left, *right;
         Arc *prev, *next;
@@ -139,9 +139,13 @@ public:
 
     Diagram construct(double width, double height, bool validate_diagram = true, double x_offset = 0.0, double y_offset = 0.0);
 
+    static Diagram construct_via_delaunator(const std::vector<glm::vec2>& sites);
+
     static bool voroni_sort(glm::vec2 v1, glm::vec2 v2);
 
     static bool check_for_edge_intersections(std::vector<Diagram::Edge> edges);
+
+    static glm::vec2 compute_center(glm::vec2 a, glm::vec2 b, glm::vec2 c);
 private:
     std::unordered_map<std::string, Cell> cells;
     Beachline beachline;
@@ -161,9 +165,7 @@ private:
     static HalfEdge* create_half_edge(glm::vec2 origin);
 
     // math
-    glm::vec2 compute_edge_origin(glm::vec2 parent, glm::vec2 child);
-
-    static glm::vec2 compute_center(glm::vec2 left, glm::vec2 middle, glm::vec2 right);
+    glm::vec2 compute_edge_origin(glm::vec2 parent, glm::vec2 child) const;
 };
 
 #endif //MAPGEN_FORTUNEALGORITHM_H
