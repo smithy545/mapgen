@@ -7,6 +7,7 @@
 
 #include <engine/Scene.h>
 #include <mapgen/Diagram.h>
+#include <unordered_map>
 #include <unordered_set>
 #include <utils/macros.h>
 
@@ -18,10 +19,15 @@ public:
     Scene::Mesh get_terrain_mesh() const;
 
     Scene::Mesh get_site_mesh() const;
+
+    Scene::Mesh get_wireframe_mesh() const;
 private:
-    Scene::Mesh mesh;
+    Scene::Mesh wire_mesh;
+    Scene::Mesh terrain_mesh;
     std::unordered_set<unsigned int> ocean;
+    std::unordered_set<unsigned int> beach;
     std::unordered_set<unsigned int> land;
+    std::unordered_map<unsigned int, double> elevations;
 
     void assign_ocean(unsigned int start, int neighbor_depth);
 
