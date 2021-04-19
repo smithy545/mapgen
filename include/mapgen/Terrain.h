@@ -6,7 +6,9 @@
 #define CIVILWAR_TERRAIN_H
 
 #include <engine/Scene.h>
+#include <entt/entt.hpp>
 #include <mapgen/Diagram.h>
+#include <string>
 #include <unordered_map>
 #include <unordered_set>
 #include <utils/macros.h>
@@ -16,18 +18,13 @@ class Terrain {
 public:
     Terrain(unsigned int num_sites, int width, int height, bool centered = false);
 
-    Scene::Mesh get_terrain_mesh() const;
+    entt::entity register_terrain_mesh(entt::registry& registry, std::string id);
 
-    Scene::Mesh get_site_mesh() const;
+    entt::entity register_site_mesh(entt::registry& registry, std::string id);
 
-    Scene::Mesh get_wireframe_mesh() const;
+    entt::entity register_wireframe_mesh(entt::registry& registry, std::string id);
 private:
-    Scene::Mesh wire_mesh;
-    Scene::Mesh terrain_mesh;
     std::unordered_set<unsigned int> ocean;
-    std::unordered_set<unsigned int> beach;
-    std::unordered_set<unsigned int> land;
-    std::unordered_map<unsigned int, double> elevations;
 
     void assign_ocean(unsigned int start, int neighbor_depth);
 
