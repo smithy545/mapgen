@@ -6,7 +6,7 @@
 
 #include <cassert>
 #include <map>
-#include <mapgen/FortuneAlgorithm.h>
+#include <mapgen/DelaunatorAlgorithm.h>
 #include <random>
 #include <vector>
 
@@ -30,7 +30,7 @@ Terrain::Terrain(unsigned int num_sites, int width, int height, bool centered) {
         coords.push_back(v.x);
         coords.push_back(v.y);
     }
-    m_base = FortuneAlgorithm::construct(coords);
+    m_base = DelaunatorAlgorithm::construct(coords);
     m_dual = m_base.dual();
 
     // assign ocean tiles
@@ -69,9 +69,8 @@ entt::entity Terrain::register_terrain_mesh(entt::registry& registry, std::strin
     }
     // normalize elevation
     auto A = 250.0;
-    for(auto [i, v]: elevations) {
+    for(auto [i, v]: elevations)
         elevations[i] = A*(v/level);
-    }
 
     // generate meshes
     std::vector<glm::vec3> vertices;

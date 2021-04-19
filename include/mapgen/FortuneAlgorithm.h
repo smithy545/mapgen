@@ -139,11 +139,7 @@ public:
 
     Diagram construct(double width, double height, bool validate_diagram = true, double x_offset = 0.0, double y_offset = 0.0);
 
-    static Diagram construct(const std::vector<double>& coords);
-
     static bool check_for_edge_intersections(std::vector<Diagram::Edge> edges);
-
-    static glm::vec2 compute_center(glm::vec2 a, glm::vec2 b, glm::vec2 c);
 private:
     std::unordered_map<std::string, Cell> cells;
     Beachline beachline;
