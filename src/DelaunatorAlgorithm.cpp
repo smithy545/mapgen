@@ -6,7 +6,7 @@
 #include <utils/math_util.h>
 
 
-Diagram DelaunatorAlgorithm::construct(const std::vector<double>& coords) {
+Diagram DelaunatorAlgorithm::construct_voroni(const std::vector<double>& coords) {
     Diagram voroni;
     delaunator::Delaunator d(coords);
     std::unordered_map<std::string, unsigned int> added_faces;

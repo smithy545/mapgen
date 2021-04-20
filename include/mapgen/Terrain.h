@@ -24,9 +24,17 @@ public:
 
     entt::entity register_wireframe_mesh(entt::registry& registry, std::string id);
 private:
+    std::unordered_set<unsigned int> mountains;
     std::unordered_set<unsigned int> ocean;
 
     void assign_ocean(unsigned int start, int neighbor_depth);
+
+    unsigned int find_nearest_mountain_face(unsigned int index);
+
+    // TODO: add parameter to recursive search to stop searching after reaching neighbors 'X' hops away from index
+    unsigned int recursively_find_nearest_mountain_face(unsigned int index);
+
+    unsigned int find_mountain_kernel(unsigned int index, const std::unordered_set<unsigned int>& to_search, std::unordered_set<unsigned int> searched);
 
 // underlying voroni/delauney diagrams
 VAR_GET(Diagram, base, public);

@@ -5,6 +5,7 @@
 #include <mapgen/Terrain.h>
 
 #include <cassert>
+#include <limits>
 #include <map>
 #include <mapgen/DelaunatorAlgorithm.h>
 #include <random>
@@ -30,21 +31,22 @@ Terrain::Terrain(unsigned int num_sites, int width, int height, bool centered) {
         coords.push_back(v.x);
         coords.push_back(v.y);
     }
-    m_base = DelaunatorAlgorithm::construct(coords);
+    m_base = DelaunatorAlgorithm::construct_voroni(coords);
     m_dual = m_base.dual();
 
     // assign ocean tiles
     for(auto index: m_base.get_hull())
-        assign_ocean(index, 3);
+        assign_ocean(index, 6);
 }
 
 entt::entity Terrain::register_terrain_mesh(entt::registry& registry, std::string id) {
+    // setup hash table of face indices based on site hash for convenient access
     std::unordered_map<std::string, unsigned int> facii;
     for(int i = 0; i < m_base.get_faces().size(); i++) {
         auto face = m_base.get_faces()[i];
         facii[Diagram::site_key(face.site)] = i;
     }
-    // assign elevations and tile type based on distance from ocean
+    // assign elevations based on distance from ocean
     std::unordered_set<unsigned int> layer;
     std::unordered_map<unsigned int, double> elevations;
     for(auto index: ocean) {
@@ -65,12 +67,30 @@ entt::entity Terrain::register_terrain_mesh(entt::registry& registry, std::strin
             }
         }
         layer = next_layer;
-        level += 10.0;
+        level *= 1.2;
     }
-    // normalize elevation
-    auto A = 250.0;
-    for(auto [i, v]: elevations)
-        elevations[i] = A*(v/level);
+    // normalize elevation and assign mountain peaks based on elevation "probability"
+    for(auto [i, v]: elevations) {
+        elevations[i] = v/level;
+        auto r = ((double) rand()/(RAND_MAX));
+        if(r < elevations[i])
+            mountains.insert(i);
+    }
+
+    for (int index = 0; index < m_base.get_faces().size(); index++) {
+        if(!ocean.contains(index) && !mountains.contains(index)) {
+            auto face = m_base.get_faces()[index];
+            auto nearest = recursively_find_nearest_mountain_face(index);
+            if (nearest != index) {
+                auto d = glm::distance(m_base.get_faces()[nearest].site, face.site);
+                // scale height inverse logarithmically to distance from mountains (range 0-1 when shifting x by e)
+                if(d > 5.0)
+                    elevations[index] *= 2.0/glm::log(d + glm::exp(1));
+                else
+                    elevations[index] = elevations[nearest]; // turn into plateau if close enough
+            }
+        }
+    }
 
     // generate meshes
     std::vector<glm::vec3> vertices;
@@ -79,17 +99,20 @@ entt::entity Terrain::register_terrain_mesh(entt::registry& registry, std::strin
     std::unordered_set<std::string, unsigned int> added_points;
     for (int index = 0; index < m_base.get_faces().size(); index++) {
         auto face = m_base.get_faces()[index];
-        auto z = elevations[index];
+        float z = elevations[index];
+        if(!ocean.contains(index))
+            z = 400*elevations[index];
         auto ocean_color = glm::vec3(0, 0, 1);
-        auto beach_color = glm::vec3(.7, .6, .3);
-        auto land_color  = glm::vec3(.6, .3, .1);
+        auto land_color  = glm::vec3(.5, .3, .1);
+        auto mountain_color = glm::vec3(.6,.6,.6);
+        auto mountain_top_color = glm::vec3(1, 1, 1);
         auto color = ocean_color;
         if(z > 0)
-            color = land_color;
+            color = land_color + glm::vec3(.2, .4, .4)/z;
         if(z > 100)
-            color = glm::vec3(.6,.6,.6);
+            color = mountain_color;
         if(z > 200)
-            color = glm::vec3(1,1,1);
+            color = mountain_top_color;
         vertices.emplace_back(face.site.x, z, face.site.y);
         colors.push_back(color);
 
@@ -168,4 +191,68 @@ void Terrain::assign_ocean(unsigned int start, int neighbor_depth) {
     ocean.insert(start);
     for(auto [neighbor, edge]: m_base.get_faces()[start].neighboring_edges)
         assign_ocean(neighbor, neighbor_depth - 1);
+}
+
+unsigned int Terrain::find_nearest_mountain_face(unsigned int index) {
+    auto distance = std::numeric_limits<double>::infinity();
+    auto face = m_base.get_faces()[index];
+    auto found = index;
+    for(auto i: mountains) {
+        if(index != i) {
+            auto mountain_face = m_base.get_faces()[i];
+            auto d = glm::distance(face.site, mountain_face.site);
+            if(found == index || d < distance) {
+                found = i;
+                distance = d;
+            }
+        }
+    }
+    return found;
+}
+
+unsigned int Terrain::recursively_find_nearest_mountain_face(unsigned int index) {
+    auto face = m_base.get_faces()[index];
+    auto neighbors = face.neighboring_edges;
+    std::unordered_set<unsigned int> next{};
+    std::unordered_set<unsigned int> searched{index};
+    auto distance = std::numeric_limits<double>::infinity();
+    auto found = index;
+    for (auto [n, e]: neighbors) {
+        if (mountains.contains(n) && glm::distance(face.site, m_base.get_faces()[n].site) < distance) {
+            found = n;
+            distance = glm::distance(face.site, m_base.get_faces()[n].site);
+        }
+        searched.insert(n);
+        for(auto [n2, e2]: m_base.get_faces()[n].neighboring_edges){
+            if(!searched.contains(n2))
+                next.insert(n2);
+        }
+    }
+    if(found == index)
+        return find_mountain_kernel(index, next, searched);
+    return found;
+}
+
+unsigned int Terrain::find_mountain_kernel(unsigned int index, const std::unordered_set<unsigned int>& to_search, std::unordered_set<unsigned int> searched) {
+    if(searched.size() == m_base.get_faces().size())
+        return index;
+    std::unordered_set<unsigned int> next{};
+    auto distance = std::numeric_limits<double>::infinity();
+    auto found = index;
+    auto base = m_base.get_faces()[index];
+    for (auto i: to_search) {
+        auto face = m_base.get_faces()[i];
+        if (mountains.contains(i) && glm::distance(face.site, base.site) < distance) {
+            found = i;
+            distance = glm::distance(face.site, base.site);
+        }
+        searched.insert(i);
+        for(auto [n, e]: face.neighboring_edges){
+            if(!searched.contains(n))
+                next.insert(n);
+        }
+    }
+    if(found == index)
+        find_mountain_kernel(index, next, searched);
+    return found;
 }

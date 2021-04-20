@@ -49,7 +49,7 @@ struct Diagram {
 
     // Convert from Voroni to Delauney or Delauney to Voroni
     Diagram dual() const {
-        // does not translate hull information (hull consists of sites for voroni and edges for Delauney)
+        // TODO: translate hull information (hull consists of sites for voroni and edges for Delauney) to dual
         Diagram diagram;
         std::unordered_map<std::string, unsigned int> added_faces;
         for(auto edge: m_edges) {
