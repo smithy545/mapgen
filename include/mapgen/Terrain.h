@@ -9,7 +9,6 @@
 #include <entt/entt.hpp>
 #include <mapgen/Diagram.h>
 #include <string>
-#include <unordered_map>
 #include <unordered_set>
 #include <utils/macros.h>
 

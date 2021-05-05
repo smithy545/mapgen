@@ -8,6 +8,7 @@
 #include <fmt/format.h>
 #include <glm/glm.hpp>
 #include <memory>
+#include <unordered_map>
 #include <unordered_set>
 #include <utils/macros.h>
 #include <utility>

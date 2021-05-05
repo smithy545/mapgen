@@ -9,6 +9,7 @@
 #include <map>
 #include <mapgen/DelaunatorAlgorithm.h>
 #include <random>
+#include <unordered_map>
 #include <vector>
 
 
@@ -96,7 +97,7 @@ entt::entity Terrain::register_terrain_mesh(entt::registry& registry, std::strin
     std::vector<glm::vec3> vertices;
     std::vector<glm::vec3> colors;
     std::vector<unsigned int> indices;
-    std::unordered_set<std::string, unsigned int> added_points;
+    std::unordered_map<std::string, unsigned int> added_points;
     for (int index = 0; index < m_base.get_faces().size(); index++) {
         auto face = m_base.get_faces()[index];
         float z = elevations[index];
