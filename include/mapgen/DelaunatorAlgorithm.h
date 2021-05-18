@@ -10,10 +10,11 @@
 
 #include "Diagram.h"
 
-
-class DelaunatorAlgorithm {
-public:
-    static Diagram construct_voroni(const std::vector<double>& coords);
-};
+namespace mapgen {
+    class DelaunatorAlgorithm {
+    public:
+        static Diagram construct_voroni(const std::vector<double> &coords);
+    };
+} // namespace mapgen
 
 #endif //MAPGEN_DELAUNATORALGORITHM_H
