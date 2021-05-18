@@ -2,8 +2,8 @@
 // Created by Philip Smith on 4/17/2021.
 //
 
-#ifndef CIVILWAR_TERRAIN_H
-#define CIVILWAR_TERRAIN_H
+#ifndef MAPGEN_TERRAIN_H
+#define MAPGEN_TERRAIN_H
 
 #include <entt/entt.hpp>
 #include <mapgen/Diagram.h>
@@ -28,7 +28,7 @@ private:
     unsigned int find_nearest_mountain_face(unsigned int index);
 
     // TODO: add parameter to recursive search to stop searching after reaching neighbors 'X' hops away from index
-    unsigned int recursively_find_nearest_mountain_face(unsigned int index);
+    unsigned int find_nearest_mountain_face_recursive(unsigned int index);
 
     unsigned int find_mountain_kernel(unsigned int index, const std::unordered_set<unsigned int>& to_search, std::unordered_set<unsigned int> searched);
 
@@ -37,4 +37,4 @@ VAR_GET(Diagram, base, public);
 VAR_GET(Diagram, dual, public);
 };
 
-#endif //CIVILWAR_TERRAIN_H
+#endif //MAPGEN_TERRAIN_H

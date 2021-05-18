@@ -87,7 +87,7 @@ entt::entity Terrain::register_terrain_mesh(entt::registry& registry) {
     for (int index = 0; index < m_base.get_faces().size(); index++) {
         if(!ocean.contains(index) && !mountains.contains(index)) {
             auto face = m_base.get_faces()[index];
-            auto nearest = recursively_find_nearest_mountain_face(index);
+            auto nearest = find_nearest_mountain_face_recursive(index);
             if (nearest != index) {
                 auto d = glm::distance(m_base.get_faces()[nearest].site, face.site);
                 // scale height inverse logarithmically to distance from mountains (range 0-1 when shifting x by e)
@@ -139,9 +139,9 @@ entt::entity Terrain::register_terrain_mesh(entt::registry& registry) {
             last_angle = angle;
         }
     }
-    auto mesh_entity = registry.create();
-    registry.emplace_or_replace<Mesh>(mesh_entity, vertices, colors, indices);
-    registry.patch<InstanceList>(mesh_entity,  [](auto &instance_list) {
+    auto entity = registry.create();
+    registry.emplace_or_replace<Mesh>(entity, vertices, colors, indices);
+    registry.patch<InstanceList>(entity,  [](auto &instance_list) {
         instance_list.set_models(std::vector<glm::mat4>{
             glm::mat4(1),
             glm::translate(glm::mat4(1), glm::vec3(-1000, 0, 0)),
@@ -149,7 +149,7 @@ entt::entity Terrain::register_terrain_mesh(entt::registry& registry) {
             glm::translate(glm::mat4(1), glm::vec3(-1000, 0, -1000))
         });
     });
-    return mesh_entity;
+    return entity;
 }
 
 void Terrain::register_voroni_mesh(entt::registry& registry) {
@@ -213,7 +213,7 @@ unsigned int Terrain::find_nearest_mountain_face(unsigned int index) {
     return found;
 }
 
-unsigned int Terrain::recursively_find_nearest_mountain_face(unsigned int index) {
+unsigned int Terrain::find_nearest_mountain_face_recursive(unsigned int index) {
     auto face = m_base.get_faces()[index];
     auto neighbors = face.neighboring_edges;
     std::unordered_set<unsigned int> next{};
