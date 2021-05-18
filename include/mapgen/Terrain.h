@@ -16,11 +16,9 @@ class Terrain {
 public:
     Terrain(unsigned int num_sites, int width, int height, bool centered = false);
 
-    entt::entity register_terrain_mesh(entt::registry& registry, std::string id);
+    entt::entity register_terrain_mesh(entt::registry& registry);
 
-    entt::entity register_site_mesh(entt::registry& registry, std::string id);
-
-    entt::entity register_wireframe_mesh(entt::registry& registry, std::string id);
+    void register_voroni_mesh(entt::registry& registry);
 private:
     std::unordered_set<unsigned int> mountains;
     std::unordered_set<unsigned int> ocean;

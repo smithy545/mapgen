@@ -45,7 +45,7 @@ Terrain::Terrain(unsigned int num_sites, int width, int height, bool centered) {
         assign_ocean(index, 6);
 }
 
-entt::entity Terrain::register_terrain_mesh(entt::registry& registry, std::string id) {
+entt::entity Terrain::register_terrain_mesh(entt::registry& registry) {
     // setup hash table of face indices based on site hash for convenient access
     std::unordered_map<std::string, unsigned int> facii;
     for(int i = 0; i < m_base.get_faces().size(); i++) {
@@ -141,23 +141,18 @@ entt::entity Terrain::register_terrain_mesh(entt::registry& registry, std::strin
     }
     auto mesh_entity = registry.create();
     registry.emplace_or_replace<Mesh>(mesh_entity, vertices, colors, indices);
-    registry.patch<InstanceList>(mesh_entity, [](auto &instances) {
-        instances.models.push_back(glm::mat4(1));
-        instances.models.push_back(glm::translate(glm::mat4(1), glm::vec3(-800, 0, 0)));
-        instances.models.push_back(glm::translate(glm::mat4(1), glm::vec3(0, 0, -600)));
-        instances.models.push_back(glm::translate(glm::mat4(1), glm::vec3(-800, 0, -600)));
-    });
-    auto instances = registry.get<InstanceList>(mesh_entity);
-    auto num_instances = instances.models.size();
-    glBindBuffer(GL_ARRAY_BUFFER, instances.id);
-    glBufferData(GL_ARRAY_BUFFER, sizeof(glm::mat4) * num_instances, &instances.models[0], GL_STATIC_DRAW);
-    registry.patch<VertexArrayObject>(mesh_entity, [num_instances](auto &vao) {
-        vao.num_instances = num_instances;
+    registry.patch<InstanceList>(mesh_entity,  [](auto &instance_list) {
+        instance_list.set_models(std::vector<glm::mat4>{
+            glm::mat4(1),
+            glm::translate(glm::mat4(1), glm::vec3(-1000, 0, 0)),
+            glm::translate(glm::mat4(1), glm::vec3(0, 0, -1000)),
+            glm::translate(glm::mat4(1), glm::vec3(-1000, 0, -1000))
+        });
     });
     return mesh_entity;
 }
 
-entt::entity Terrain::register_site_mesh(entt::registry& registry, std::string id) {
+void Terrain::register_voroni_mesh(entt::registry& registry) {
     std::vector<glm::vec3> vertices;
     std::vector<glm::vec3> colors;
     std::vector<unsigned int> indices;
@@ -167,34 +162,30 @@ entt::entity Terrain::register_site_mesh(entt::registry& registry, std::string i
         colors.push_back(color);
         indices.push_back(indices.size());
     }
-    auto mesh_entity = registry.create();
-    return mesh_entity;
-}
-
-entt::entity Terrain::register_wireframe_mesh(entt::registry& registry, std::string id) {
-    std::vector<glm::vec3> vertices;
-    std::vector<glm::vec3> colors;
-    std::vector<unsigned int> indices;
-    for (auto & edge: m_base.get_edges()) {
-        auto color = glm::vec3(1, 1, 1);
+    auto entity = registry.create();
+    registry.emplace_or_replace<Mesh>(entity, vertices, colors, indices);
+    registry.patch<InstanceList>(entity,  [](auto &instance_list) {
+        instance_list.set_models(std::vector<glm::mat4>{glm::mat4(1)});
+        instance_list.render_strategy = GL_POINTS;
+    });
+    vertices.clear();
+    colors.clear();
+    indices.clear();
+    for(auto &edge: m_base.get_edges()) {
+        auto color = glm::vec3(1,1,0);
         vertices.emplace_back(edge.first.x, edge.first.y, 0);
+        colors.push_back(color);
+        indices.push_back(indices.size());
         vertices.emplace_back(edge.second.x, edge.second.y, 0);
         colors.push_back(color);
-        colors.push_back(color);
-        indices.push_back(indices.size());
         indices.push_back(indices.size());
     }
-    for (auto & edge: m_dual.get_edges()) {
-        auto color = glm::vec3(1, 1, 0);
-        vertices.emplace_back(edge.first.x, edge.first.y, 0);
-        vertices.emplace_back(edge.second.x, edge.second.y, 0);
-        colors.push_back(color);
-        colors.push_back(color);
-        indices.push_back(indices.size());
-        indices.push_back(indices.size());
-    }
-    auto mesh_entity = registry.create();
-    return mesh_entity;
+    entity = registry.create();
+    registry.emplace_or_replace<Mesh>(entity, vertices, colors, indices);
+    registry.patch<InstanceList>(entity,  [](auto &instance_list) {
+        instance_list.set_models(std::vector<glm::mat4>{glm::mat4(1)});
+        instance_list.render_strategy = GL_LINES;
+    });
 }
 
 void Terrain::assign_ocean(unsigned int start, int neighbor_depth) {
