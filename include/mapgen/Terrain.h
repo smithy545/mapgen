@@ -5,7 +5,6 @@
 #ifndef CIVILWAR_TERRAIN_H
 #define CIVILWAR_TERRAIN_H
 
-#include <engine/Scene.h>
 #include <entt/entt.hpp>
 #include <mapgen/Diagram.h>
 #include <string>

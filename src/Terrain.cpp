@@ -5,6 +5,10 @@
 #include <mapgen/Terrain.h>
 
 #include <cassert>
+#include <engine/InstanceList.h>
+#include <engine/Mesh.h>
+#include <engine/Renderer.h>
+#include <glm/glm.hpp>
 #include <limits>
 #include <map>
 #include <mapgen/DelaunatorAlgorithm.h>
@@ -57,7 +61,8 @@ entt::entity Terrain::register_terrain_mesh(entt::registry& registry, std::strin
                 layer.insert(n);
         }
     }
-    double level = 1.0;
+    auto level = 1.0;
+    auto level_step = 1.2;
     while(!layer.empty()) {
         std::unordered_set<unsigned int> next_layer;
         for(auto i: layer) {
@@ -68,7 +73,7 @@ entt::entity Terrain::register_terrain_mesh(entt::registry& registry, std::strin
             }
         }
         layer = next_layer;
-        level *= 1.2;
+        level *= level_step;
     }
     // normalize elevation and assign mountain peaks based on elevation "probability"
     for(auto [i, v]: elevations) {
@@ -110,7 +115,7 @@ entt::entity Terrain::register_terrain_mesh(entt::registry& registry, std::strin
         auto color = ocean_color;
         if(z > 0)
             color = land_color + glm::vec3(.2, .4, .4)/z;
-        if(z > 100)
+        if(z > 50)
             color = mountain_color;
         if(z > 200)
             color = mountain_top_color;
@@ -134,9 +139,20 @@ entt::entity Terrain::register_terrain_mesh(entt::registry& registry, std::strin
         }
     }
     auto mesh_entity = registry.create();
-    registry.emplace<Scene::Mesh>(mesh_entity, vertices, colors, indices);
-    registry.emplace<std::string>(mesh_entity, id);
-    registry.emplace<Scene::InstanceList::RenderStrategy>(mesh_entity, Scene::InstanceList::TRIANGLES);
+    registry.emplace_or_replace<Mesh>(mesh_entity, vertices, colors, indices);
+    registry.patch<InstanceList>(mesh_entity, [](auto &instances) {
+        instances.models.push_back(glm::mat4(1));
+        instances.models.push_back(glm::translate(glm::mat4(1), glm::vec3(-800, 0, 0)));
+        instances.models.push_back(glm::translate(glm::mat4(1), glm::vec3(0, 0, -600)));
+        instances.models.push_back(glm::translate(glm::mat4(1), glm::vec3(-800, 0, -600)));
+    });
+    auto instances = registry.get<InstanceList>(mesh_entity);
+    auto num_instances = instances.models.size();
+    glBindBuffer(GL_ARRAY_BUFFER, instances.id);
+    glBufferData(GL_ARRAY_BUFFER, sizeof(glm::mat4) * num_instances, &instances.models[0], GL_STATIC_DRAW);
+    registry.patch<Renderer::VertexArrayObject>(mesh_entity, [num_instances](auto &vao) {
+        vao.num_instances = num_instances;
+    });
     return mesh_entity;
 }
 
@@ -151,9 +167,6 @@ entt::entity Terrain::register_site_mesh(entt::registry& registry, std::string i
         indices.push_back(indices.size());
     }
     auto mesh_entity = registry.create();
-    registry.emplace<Scene::Mesh>(mesh_entity, vertices, colors, indices);
-    registry.emplace<std::string>(mesh_entity, id);
-    registry.emplace<Scene::InstanceList::RenderStrategy>(mesh_entity, Scene::InstanceList::POINTS);
     return mesh_entity;
 }
 
@@ -180,9 +193,6 @@ entt::entity Terrain::register_wireframe_mesh(entt::registry& registry, std::str
         indices.push_back(indices.size());
     }
     auto mesh_entity = registry.create();
-    registry.emplace<Scene::Mesh>(mesh_entity, vertices, colors, indices);
-    registry.emplace<std::string>(mesh_entity, id);
-    registry.emplace<Scene::InstanceList::RenderStrategy>(mesh_entity, Scene::InstanceList::LINES);
     return mesh_entity;
 }
 
