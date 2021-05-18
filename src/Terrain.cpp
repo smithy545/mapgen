@@ -7,8 +7,9 @@
 #include <cassert>
 #include <engine/InstanceList.h>
 #include <engine/Mesh.h>
-#include <engine/Renderer.h>
+#include <engine/VertexArrayObject.h>
 #include <glm/glm.hpp>
+#include <glm/gtx/transform.hpp>
 #include <limits>
 #include <map>
 #include <mapgen/DelaunatorAlgorithm.h>
@@ -150,7 +151,7 @@ entt::entity Terrain::register_terrain_mesh(entt::registry& registry, std::strin
     auto num_instances = instances.models.size();
     glBindBuffer(GL_ARRAY_BUFFER, instances.id);
     glBufferData(GL_ARRAY_BUFFER, sizeof(glm::mat4) * num_instances, &instances.models[0], GL_STATIC_DRAW);
-    registry.patch<Renderer::VertexArrayObject>(mesh_entity, [num_instances](auto &vao) {
+    registry.patch<VertexArrayObject>(mesh_entity, [num_instances](auto &vao) {
         vao.num_instances = num_instances;
     });
     return mesh_entity;
