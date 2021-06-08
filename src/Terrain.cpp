@@ -146,10 +146,10 @@ namespace mapgen {
         registry.emplace_or_replace<Mesh>(entity, vertices, colors, indices);
         registry.patch<InstanceList>(entity, [](auto &instance_list) {
             instance_list.set_models(std::vector<glm::mat4>{
-                    glm::mat4(1),
-                    glm::translate(glm::mat4(1), glm::vec3(-1000, 0, 0)),
-                    glm::translate(glm::mat4(1), glm::vec3(0, 0, -1000)),
-                    glm::translate(glm::mat4(1), glm::vec3(-1000, 0, -1000))
+                    glm::mat4(1)
+                    //glm::translate(glm::mat4(1), glm::vec3(-1000, 0, 0)),
+                    //glm::translate(glm::mat4(1), glm::vec3(0, 0, -1000)),
+                    //glm::translate(glm::mat4(1), glm::vec3(-1000, 0, -1000))
             });
         });
         return entity;
