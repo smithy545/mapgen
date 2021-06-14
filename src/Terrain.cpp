@@ -145,7 +145,7 @@ namespace mapgen {
         auto entity = registry.create();
         registry.emplace_or_replace<Mesh>(entity, vertices, colors, indices);
         registry.patch<InstanceList>(entity, [](auto &instance_list) {
-            instance_list.set_models(std::vector<glm::mat4>{
+            instance_list.set_instances(std::vector<glm::mat4>{
                     glm::mat4(1)
                     //glm::translate(glm::mat4(1), glm::vec3(-1000, 0, 0)),
                     //glm::translate(glm::mat4(1), glm::vec3(0, 0, -1000)),
@@ -168,7 +168,7 @@ namespace mapgen {
         auto entity = registry.create();
         registry.emplace_or_replace<Mesh>(entity, vertices, colors, indices);
         registry.patch<InstanceList>(entity, [](auto &instance_list) {
-            instance_list.set_models(std::vector<glm::mat4>{glm::mat4(1)});
+            instance_list.add_instance(glm::mat4(1));
             instance_list.render_strategy = GL_POINTS;
         });
         vertices.clear();
@@ -186,7 +186,7 @@ namespace mapgen {
         entity = registry.create();
         registry.emplace_or_replace<Mesh>(entity, vertices, colors, indices);
         registry.patch<InstanceList>(entity, [](auto &instance_list) {
-            instance_list.set_models(std::vector<glm::mat4>{glm::mat4(1)});
+            instance_list.add_instance(glm::mat4(1));
             instance_list.render_strategy = GL_LINES;
         });
     }
