@@ -15,10 +15,12 @@
 #include <mapgen/DelaunatorAlgorithm.h>
 #include <random>
 #include <unordered_map>
+#include <utils/math_util.h>
 #include <vector>
 
 
 using namespace engine;
+using namespace utils::math;
 
 namespace mapgen {
     Terrain::Terrain(unsigned int num_sites, int width, int height, bool centered) {
@@ -48,7 +50,7 @@ namespace mapgen {
             assign_ocean(index, 6);
     }
 
-    entt::entity Terrain::register_terrain_mesh(entt::registry &registry) {
+    entt::entity Terrain::register_terrain_mesh(entt::registry &registry, btTriangleMesh* body_mesh) {
         // setup hash table of face indices based on site hash for convenient access
         std::unordered_map<std::string, unsigned int> facii;
         for (int i = 0; i < m_base.get_faces().size(); i++) {
@@ -152,43 +154,13 @@ namespace mapgen {
                     //glm::translate(glm::mat4(1), glm::vec3(-1000, 0, -1000))
             });
         });
+        for(auto i = 0; i < indices.size(); i += 3) {
+            auto v1 = g2bt(vertices[indices[i]]);
+            auto v2 = g2bt(vertices[indices[i+1]]);
+            auto v3 = g2bt(vertices[indices[i+2]]);
+            body_mesh->addTriangle(v1, v2, v3);
+        }
         return entity;
-    }
-
-    void Terrain::register_voroni_mesh(entt::registry &registry) {
-        std::vector<glm::vec3> vertices;
-        std::vector<glm::vec3> colors;
-        std::vector<unsigned int> indices;
-        for (auto &face: m_base.get_faces()) {
-            auto color = glm::vec3(1, 0, 0);
-            vertices.emplace_back(face.site.x, face.site.y, 0);
-            colors.push_back(color);
-            indices.push_back(indices.size());
-        }
-        auto entity = registry.create();
-        registry.emplace_or_replace<Mesh>(entity, vertices, colors, indices);
-        registry.patch<InstanceList>(entity, [](auto &instance_list) {
-            instance_list.add_instance(glm::mat4(1));
-            instance_list.render_strategy = GL_POINTS;
-        });
-        vertices.clear();
-        colors.clear();
-        indices.clear();
-        for (auto &edge: m_base.get_edges()) {
-            auto color = glm::vec3(1, 1, 0);
-            vertices.emplace_back(edge.first.x, edge.first.y, 0);
-            colors.push_back(color);
-            indices.push_back(indices.size());
-            vertices.emplace_back(edge.second.x, edge.second.y, 0);
-            colors.push_back(color);
-            indices.push_back(indices.size());
-        }
-        entity = registry.create();
-        registry.emplace_or_replace<Mesh>(entity, vertices, colors, indices);
-        registry.patch<InstanceList>(entity, [](auto &instance_list) {
-            instance_list.add_instance(glm::mat4(1));
-            instance_list.render_strategy = GL_LINES;
-        });
     }
 
     void Terrain::assign_ocean(unsigned int start, int neighbor_depth) {

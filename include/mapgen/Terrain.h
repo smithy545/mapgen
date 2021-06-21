@@ -5,6 +5,7 @@
 #ifndef MAPGEN_TERRAIN_H
 #define MAPGEN_TERRAIN_H
 
+#include <btBulletCollisionCommon.h>
 #include <entt/entt.hpp>
 #include <mapgen/Diagram.h>
 #include <string>
@@ -17,9 +18,7 @@ namespace mapgen {
     public:
         Terrain(unsigned int num_sites, int width, int height, bool centered = false);
 
-        entt::entity register_terrain_mesh(entt::registry &registry);
-
-        void register_voroni_mesh(entt::registry &registry);
+        entt::entity register_terrain_mesh(entt::registry &registry, btTriangleMesh* body_mesh);
 
     private:
         std::unordered_set<unsigned int> mountains;
