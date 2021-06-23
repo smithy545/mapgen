@@ -121,7 +121,7 @@ namespace mapgen {
             auto color = ocean_color;
             if (z > 0)
                 color = land_color + glm::vec3(.2, .4, .4) / z;
-            if (z > 50)
+            if (z > 80)
                 color = mountain_color;
             if (z > 200)
                 color = mountain_top_color;
@@ -147,12 +147,7 @@ namespace mapgen {
         auto entity = registry.create();
         registry.emplace_or_replace<Mesh>(entity, vertices, colors, indices);
         registry.patch<InstanceList>(entity, [](auto &instance_list) {
-            instance_list.set_instances(std::vector<glm::mat4>{
-                    glm::mat4(1)
-                    //glm::translate(glm::mat4(1), glm::vec3(-1000, 0, 0)),
-                    //glm::translate(glm::mat4(1), glm::vec3(0, 0, -1000)),
-                    //glm::translate(glm::mat4(1), glm::vec3(-1000, 0, -1000))
-            });
+            instance_list.set_instances(std::vector<glm::mat4>{glm::mat4(1)});
         });
         for(auto i = 0; i < indices.size(); i += 3) {
             auto v1 = g2bt(vertices[indices[i]]);

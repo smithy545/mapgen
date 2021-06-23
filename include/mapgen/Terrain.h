@@ -19,7 +19,6 @@ namespace mapgen {
         Terrain(unsigned int num_sites, int width, int height, bool centered = false);
 
         entt::entity register_terrain_mesh(entt::registry &registry, btTriangleMesh* body_mesh);
-
     private:
         std::unordered_set<unsigned int> mountains;
         std::unordered_set<unsigned int> ocean;
