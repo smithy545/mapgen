@@ -7,7 +7,6 @@
 #include <cassert>
 #include <engine/InstanceList.h>
 #include <engine/Mesh.h>
-#include <engine/VertexArrayObject.h>
 #include <glm/glm.hpp>
 #include <glm/gtx/transform.hpp>
 #include <limits>
