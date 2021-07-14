@@ -5,6 +5,7 @@
 #include <mapgen/DelaunatorAlgorithm.h>
 #include <utils/math_util.h>
 
+
 namespace mapgen {
     Diagram DelaunatorAlgorithm::construct_voroni(const std::vector<double> &coords) {
         Diagram voroni;
@@ -51,5 +52,31 @@ namespace mapgen {
         }
 
         return voroni;
+    }
+
+    Diagram DelaunatorAlgorithm::construct_delauney(const std::vector<double> &coords) {
+        Diagram delauney;
+        delaunator::Delaunator d(coords);
+        std::unordered_map<std::string, unsigned int> added_faces;
+        for (std::size_t i = 0; i < d.triangles.size(); i++) {
+            auto i0 = i - (i % 3);
+            auto site = utils::math::compute_triangle_circumcenter(
+                    glm::vec2(d.coords[2 * d.triangles[i0]], d.coords[2 * d.triangles[i0] + 1]),
+                    glm::vec2(d.coords[2 * d.triangles[i0 + 1]], d.coords[2 * d.triangles[i0 + 1] + 1]),
+                    glm::vec2(d.coords[2 * d.triangles[i0 + 2]], d.coords[2 * d.triangles[i0 + 2] + 1])
+            );
+            if(!added_faces.contains(Diagram::site_key(site)))
+                delauney.add_face(site);
+        }
+        for (std::size_t i = 0; i < d.triangles.size(); i++) {
+            auto j = d.halfedges[i];
+            if(j != delaunator::INVALID_INDEX) {
+                glm::vec2 p1(d.coords[2 * d.triangles[i]], d.coords[2 * d.triangles[i] + 1]);
+                glm::vec2 p2(d.coords[2 * d.triangles[j]], d.coords[2 * d.triangles[j] + 1]);
+                delauney.add_edge(p1, p2, i, j);
+            }
+        }
+
+        return delauney;
     }
 } // namespace mapgen
