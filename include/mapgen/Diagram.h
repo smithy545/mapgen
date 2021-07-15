@@ -37,6 +37,10 @@ namespace mapgen {
 
         bool on_hull(unsigned int index);
 
+        void cull_edge(unsigned int index);
+
+        void modify_edge(unsigned int index, glm::vec2 first, glm::vec2 second);
+
         Diagram dual() const;
 
         Diagram relax() const;

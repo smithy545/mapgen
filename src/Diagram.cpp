@@ -67,7 +67,7 @@ namespace mapgen {
             new_sites.push_back(avg.x);
             new_sites.push_back(avg.y);
         }
-        return DelaunatorAlgorithm::construct_voroni(new_sites);
+        return DelaunatorAlgorithm::construct_voroni_diagram(new_sites);
     }
 
     std::string Diagram::edge_key(glm::vec2 origin, glm::vec2 destination) {
@@ -78,5 +78,26 @@ namespace mapgen {
         if (plain)
             return fmt::format("{},{}", (int) site.x, (int) site.y);
         return fmt::format("glm::vec2({},{})", (int) site.x, (int) site.y);
+    }
+
+    void Diagram::cull_edge(unsigned int index) {
+        // can't remove from edges because that will modify all edge indices so just remove references to edge
+        std::vector<std::pair<unsigned int, unsigned int>> edges;
+        for(int i = 0; i < m_faces.size(); i++) {
+            auto &face = m_faces[i];
+            for(auto [n, e]: face.neighboring_edges) {
+                if(e == index)
+                    edges.emplace_back(i, n);
+            }
+        }
+        for(auto edge: edges) {
+            m_faces[edge.first].neighboring_edges.erase(edge.second);
+            m_faces[edge.second].neighboring_edges.erase(edge.first);
+        }
+    }
+
+    void Diagram::modify_edge(unsigned int index, glm::vec2 first, glm::vec2 second) {
+        m_edges[index].first = first;
+        m_edges[index].second = second;
     }
 } // namespace mapgen

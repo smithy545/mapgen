@@ -30,7 +30,9 @@ namespace mapgen {
 
         Terrain(unsigned int num_sites, int width, int height, int num_tectonic_plates = 1, bool centered = false);
 
-        entt::entity register_terrain_mesh(entt::registry &registry);
+        void register_terrain_mesh(entt::registry &registry);
+
+        void register_voroni_debug_mesh(entt::registry &registry);
 
         [[nodiscard]]
         std::vector<glm::vec3> get_mouse_terrain_collision(float x, float y, const RenderContext& context) const;
@@ -55,7 +57,7 @@ namespace mapgen {
         unsigned int find_mountain_kernel(unsigned int index, const std::unordered_set<unsigned int> &to_search,
                                           std::unordered_set<unsigned int> searched);
 
-    VAR_GET(entt::entity, entity, public);
+    VAR_GET(entt::entity, entity, public){entt::null};
     VAR_GET(Diagram, base, public);
     VAR_GET(Diagram, dual, public);
     };

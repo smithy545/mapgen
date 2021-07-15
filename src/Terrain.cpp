@@ -45,7 +45,7 @@ namespace mapgen {
             coords.push_back(v.x);
             coords.push_back(v.y);
         }
-        m_base = DelaunatorAlgorithm::construct_voroni(coords);
+        m_base = DelaunatorAlgorithm::construct_clamped_voroni_diagram(coords, 0, 0, width, height);
         // apply lloyd relaxation for prettiness
         m_base = m_base.relax();
         m_dual = m_base.dual();
@@ -59,7 +59,54 @@ namespace mapgen {
             assign_ocean(index, 2);
     }
 
-    entt::entity Terrain::register_terrain_mesh(entt::registry &registry) {
+    void Terrain::register_voroni_debug_mesh(entt::registry &registry) {
+        Mesh edge_mesh, face_mesh, site_mesh;
+        for(auto edge: m_base.get_edges()) {
+            auto i = edge_mesh.vertices.size();
+            edge_mesh.vertices.emplace_back(edge.first.x, -1, edge.first.y);
+            edge_mesh.vertices.emplace_back(edge.second.x, -1, edge.second.y);
+            edge_mesh.colors.emplace_back(0,0,1);
+            edge_mesh.colors.emplace_back(0,0,1);
+            edge_mesh.indices.push_back(i++);
+            edge_mesh.indices.push_back(i);
+        }
+        auto e1 = registry.create();
+        registry.emplace_or_replace<Mesh>(e1, edge_mesh);
+        registry.patch<InstanceList>(e1, [](auto &instance_list) {
+            instance_list.set_instances(std::vector<glm::mat4>{glm::mat4(1)});
+            instance_list.render_strategy = GL_LINES;
+        });
+        for(const auto &face: m_base.get_faces()) {
+            for(auto [n, e]: face.neighboring_edges) {
+                auto edge = m_base.get_edges()[e];
+                auto i = face_mesh.vertices.size();
+                face_mesh.vertices.emplace_back(edge.first.x, 0, edge.first.y);
+                face_mesh.vertices.emplace_back(edge.second.x, 0, edge.second.y);
+                face_mesh.colors.emplace_back(1, 1, 0);
+                face_mesh.colors.emplace_back(1, 1, 0);
+                face_mesh.indices.push_back(i++);
+                face_mesh.indices.push_back(i);
+            }
+            auto i = site_mesh.vertices.size();
+            site_mesh.vertices.emplace_back(face.site.x, 0, face.site.y);
+            site_mesh.colors.emplace_back(1,0,0);
+            site_mesh.indices.push_back(i);
+        }
+        auto e2 = registry.create();
+        registry.emplace_or_replace<Mesh>(e2, face_mesh);
+        registry.patch<InstanceList>(e2, [](auto &instance_list) {
+            instance_list.set_instances(std::vector<glm::mat4>{glm::mat4(1)});
+            instance_list.render_strategy = GL_LINES;
+        });
+        auto e3 = registry.create();
+        registry.emplace_or_replace<Mesh>(e3, site_mesh);
+        registry.patch<InstanceList>(e3, [](auto &instance_list) {
+            instance_list.set_instances(std::vector<glm::mat4>{glm::mat4(1)});
+            instance_list.render_strategy = GL_POINTS;
+        });
+    }
+
+    void Terrain::register_terrain_mesh(entt::registry &registry) {
         // generate terrain regions
         for (unsigned int i = 0; i < m_base.get_faces().size(); i++) {
             regions.insert({i, TerrainRegion{i}});
@@ -152,7 +199,7 @@ namespace mapgen {
         std::unordered_map<std::string, unsigned int> added_points;
         for (auto [index, region]: regions) {
             if (!ocean.contains(index))
-                region.elevation *= 400;
+                region.elevation *= 200;
             auto ocean_color = glm::vec3(0, 0, 1);
             auto land_color = glm::vec3(.5, .3, .1);
             auto mountain_color = glm::vec3(.6, .6, .6);
@@ -204,8 +251,6 @@ namespace mapgen {
         m_shape = std::make_shared<btBvhTriangleMeshShape>(m_mesh.get(), true);
         m_body = std::make_shared<btCollisionObject>();
         m_body->setCollisionShape(m_shape.get());
-
-        return m_entity;
     }
 
     void Terrain::assign_ocean(unsigned int start, int neighbor_depth) {
