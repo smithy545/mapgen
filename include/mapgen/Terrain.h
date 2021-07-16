@@ -6,6 +6,7 @@
 #define MAPGEN_TERRAIN_H
 
 #include <btBulletCollisionCommon.h>
+#include <engine/Mesh.h>
 #include <engine/RenderContext.h>
 #include <entt/entt.hpp>
 #include <map>
@@ -35,14 +36,20 @@ namespace mapgen {
         void register_voroni_debug_mesh(entt::registry &registry);
 
         [[nodiscard]]
-        std::vector<glm::vec3> get_mouse_terrain_collision(float x, float y, const RenderContext& context) const;
+        glm::vec3 get_mouse_terrain_collision(float x, float y, const RenderContext& context) const;
+
+        [[nodiscard]]
+        std::vector<glm::vec3> get_mouse_terrain_colliding_triangle(float x, float y, const RenderContext& context) const;
+
+        [[nodiscard]]
+        Mesh get_face_mesh(unsigned int index, glm::vec3 color);
 
     private:
-        std::unordered_set<unsigned int> mountains;
-        std::unordered_set<unsigned int> ocean;
-        std::unordered_set<unsigned int> river_origins;
-        std::unordered_set<unsigned int> tectonic_plates;
-        std::map<unsigned int, TerrainRegion> regions;
+        std::unordered_set<unsigned int> m_mountains;
+        std::unordered_set<unsigned int> m_oceans;
+        std::unordered_set<unsigned int> m_rivers;
+        std::unordered_set<unsigned int> m_tetonic_plates;
+        std::map<unsigned int, TerrainRegion> m_regions;
         std::shared_ptr<btBvhTriangleMeshShape> m_shape{nullptr};
         std::shared_ptr<btCollisionObject> m_body{nullptr};
         std::shared_ptr<btTriangleMesh> m_mesh{nullptr};

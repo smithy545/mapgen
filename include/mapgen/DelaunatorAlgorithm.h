@@ -17,11 +17,11 @@ namespace mapgen {
     public:
         static Diagram construct_voroni_diagram(const std::vector<double> &coords);
 
-        static Diagram construct_clamped_voroni_diagram(const std::vector<double> &coords, double x, double y, double width, double height);
+        static Diagram construct_clamped_voroni_diagram(const std::vector<double> &coords, float x, float y, float width, float height);
 
         static Diagram construct_delauney_diagram(const std::vector<double> &coords);
     private:
-        static bool collides(glm::vec2 p, double min_x, double min_y, double max_x, double max_y) {
+        static bool collides(glm::vec2 p, float min_x, float min_y, float max_x, float max_y) {
             return p.x >= min_x && p.x < max_x && p.y >= min_y && p.y < max_y;
         }
 
@@ -41,14 +41,14 @@ namespace mapgen {
                 if(c2 == 0) {
                     float rr = glm::dot(r, r);
                     float t0 = glm::dot(d, r) / rr;
-                    float t1 = t0 + glm::dot(s, r)  / rr;
-                    if((t0 >= 0 && t0 <= 1) || (t1 >= 0 && t1 <= 1))
-                        return p1 + t0*r;
+                    float t1 = glm::dot(q1 + s - p1, r)  / rr;
+                    if((t0 >= 0.f && t0 <= 1.f) || (t1 >= 0.f && t1 <= 1.f))
+                        return t1 > t0 ? p1 + t0*r : p1 + t1*r;
                 }
             } else {
                 float u = c2 / c1;
                 float t = c3 / c1;
-                if(t >= 0 && t <=1 && u >= 0 && u <= 1)
+                if(t >= 0.f && t <= 1.f && u >= 0.f && u <= 1.f)
                     return p1 + t*r;
             }
             throw std::runtime_error("Lines do not intersect");

@@ -54,7 +54,7 @@ namespace mapgen {
         return voroni;
     }
 
-    Diagram DelaunatorAlgorithm::construct_clamped_voroni_diagram(const std::vector<double> &coords, double x, double y, double width, double height) {
+    Diagram DelaunatorAlgorithm::construct_clamped_voroni_diagram(const std::vector<double> &coords, float x, float y, float width, float height) {
         Diagram voroni;
         delaunator::Delaunator d(coords);
         std::unordered_map<std::string, unsigned int> added_faces;
@@ -101,7 +101,7 @@ namespace mapgen {
         // cull edges completely outside of bounds first then modify edges that intersect with boundary
         auto max_x = x + width;
         auto max_y = y + height;
-        for(auto &face: voroni.get_faces()) {
+        for(auto& face: voroni.get_faces()) {
             auto neighbors = face.neighboring_edges;
             for (auto[n, e]: neighbors) {
                 auto edge = voroni.get_edges()[e];
@@ -110,7 +110,7 @@ namespace mapgen {
                     voroni.cull_edge(e);
             }
         }
-        for(auto &face: voroni.get_faces()) {
+        for(auto& face: voroni.get_faces()) {
             for(auto [n, e]: face.neighboring_edges) {
                 auto edge = voroni.get_edges()[e];
                 auto p1 = edge.first;
@@ -118,32 +118,36 @@ namespace mapgen {
                 try {
                     if (!collides(p1, x, y, max_x, max_y)) {
                         if (p1.x < x) {
-                            edge.second = compute_intersection(p1, p2, glm::vec2(x, y), glm::vec2(x, y + height));
+                            p1 = compute_intersection(p1, p2, glm::vec2(x, y), glm::vec2(x, y + height));
                         } else if (p1.y < y) {
-                            edge.second = compute_intersection(p1, p2, glm::vec2(x, y), glm::vec2(x + width, y));
+                            p1 = compute_intersection(p1, p2, glm::vec2(x, y), glm::vec2(x + width, y));
                         } else if (p1.x >= max_x) {
-                            edge.second = compute_intersection(p1, p2, glm::vec2(x + width, y),
+                            p1 = compute_intersection(p1, p2, glm::vec2(x + width, y),
                                                                glm::vec2(x + width, y + height));
                         } else if (p1.y >= max_y) {
-                            edge.second = compute_intersection(p1, p2, glm::vec2(x, y + height),
+                            p1 = compute_intersection(p1, p2, glm::vec2(x, y + height),
                                                                glm::vec2(x + width, y + height));
-                        }
+                        } else
+                            throw std::runtime_error("No intersection found");
                     } else if (!collides(p2, x, y, max_x, max_y)) {
                         if (p2.x < x) {
-                            edge.first = compute_intersection(p1, p2, glm::vec2(x, y), glm::vec2(x, y + height));
+                            p2 = compute_intersection(p1, p2, glm::vec2(x, y), glm::vec2(x, y + height));
                         } else if (p2.y < y) {
-                            edge.first = compute_intersection(p1, p2, glm::vec2(x, y), glm::vec2(x + width, y));
+                            p2 = compute_intersection(p1, p2, glm::vec2(x, y), glm::vec2(x + width, y));
                         } else if (p2.x >= max_x) {
-                            edge.first = compute_intersection(p1, p2, glm::vec2(x + width, y),
+                            p2 = compute_intersection(p1, p2, glm::vec2(x + width, y),
                                                               glm::vec2(x + width, y + height));
                         } else if (p2.y >= max_y) {
-                            edge.first = compute_intersection(p1, p2, glm::vec2(x, y + height),
+                            p2 = compute_intersection(p1, p2, glm::vec2(x, y + height),
                                                               glm::vec2(x + width, y + height));
-                        }
+                        } else
+                            throw std::runtime_error("No intersection found but there should be...");
                     }
                 } catch(std::runtime_error ex) {
                     std::cout << e << ": " << ex.what() << std::endl;
                 }
+                if(p1 != edge.first || p2 != edge.second)
+                    voroni.modify_edge(e, p1, p2);
             }
         }
 

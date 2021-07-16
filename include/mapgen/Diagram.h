@@ -45,6 +45,8 @@ namespace mapgen {
 
         Diagram relax() const;
 
+        Diagram relax(float x, float y, float width, float height) const;
+
         static std::string edge_key(glm::vec2 origin, glm::vec2 destination);
 
         static std::string site_key(glm::vec2 site, bool plain = true);

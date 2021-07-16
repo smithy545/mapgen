@@ -70,6 +70,21 @@ namespace mapgen {
         return DelaunatorAlgorithm::construct_voroni_diagram(new_sites);
     }
 
+    Diagram Diagram::relax(float x, float y, float width, float height) const {
+        Diagram diagram;
+        std::vector<double> new_sites;
+        for(const auto& face: m_faces) {
+            glm::vec2 avg{0,0};
+            for(auto [n, e]: face.neighboring_edges)
+                avg += m_edges[e].first;
+            avg /= face.neighboring_edges.size();
+            new_sites.push_back(avg.x);
+            new_sites.push_back(avg.y);
+        }
+        return DelaunatorAlgorithm::construct_clamped_voroni_diagram(new_sites, x, y, width, height);
+    }
+
+
     std::string Diagram::edge_key(glm::vec2 origin, glm::vec2 destination) {
         return fmt::format("{}, {} | {}, {}", origin.x, origin.y, destination.x, destination.y);
     }

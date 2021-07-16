@@ -7,7 +7,6 @@
 #include <BulletCollision/NarrowPhaseCollision/btRaycastCallback.h>
 #include <cassert>
 #include <engine/InstanceList.h>
-#include <engine/Mesh.h>
 #include <glm/glm.hpp>
 #include <glm/gtx/transform.hpp>
 #include <glm/gtx/matrix_decompose.hpp>
@@ -15,6 +14,7 @@
 #include <map>
 #include <mapgen/DelaunatorAlgorithm.h>
 #include <random>
+#include <stdexcept>
 #include <unordered_map>
 #include <utils/math_util.h>
 #include <utility>
@@ -45,14 +45,12 @@ namespace mapgen {
             coords.push_back(v.x);
             coords.push_back(v.y);
         }
-        m_base = DelaunatorAlgorithm::construct_clamped_voroni_diagram(coords, 0, 0, width, height);
-        // apply lloyd relaxation for prettiness
-        m_base = m_base.relax();
+        m_base = DelaunatorAlgorithm::construct_voroni_diagram(coords);
         m_dual = m_base.dual();
 
         // randomly choose tectonic plate origins from faces
-        while(tectonic_plates.size() < num_tectonic_plates)
-            tectonic_plates.insert(rand() % m_base.get_faces().size());
+        while (m_tetonic_plates.size() < num_tectonic_plates)
+            m_tetonic_plates.insert(rand() % m_base.get_faces().size());
 
         // assign ocean tiles
         for (auto index: m_base.get_hull())
@@ -109,13 +107,13 @@ namespace mapgen {
     void Terrain::register_terrain_mesh(entt::registry &registry) {
         // generate terrain regions
         for (unsigned int i = 0; i < m_base.get_faces().size(); i++) {
-            regions.insert({i, TerrainRegion{i}});
+            m_regions.insert({i, TerrainRegion{i}});
         }
 
         // assign layers where each layer's invariant is the distance to the closest ocean site
         std::unordered_set<unsigned int> added;
         std::unordered_set<unsigned int> layer;
-        for (auto index: ocean) {
+        for (auto index: m_oceans) {
             for (auto[n, e]: m_base.get_faces()[index].neighboring_edges) {
                 layer.insert(n);
                 added.insert(n);
@@ -126,7 +124,7 @@ namespace mapgen {
         do {
             std::unordered_set<unsigned int> next_layer;
             for (auto i: layer) {
-                regions[i].elevation = level;
+                m_regions[i].elevation = level;
                 for (auto[n, e]: m_base.get_faces()[i].neighboring_edges) {
                     if (!added.contains(n)) {
                         next_layer.insert(n);
@@ -141,25 +139,25 @@ namespace mapgen {
         // create tectonic plates
         added.clear();
         std::vector<unsigned int> ordered;
-        ordered.insert(ordered.end(), tectonic_plates.begin(), tectonic_plates.end());
+        ordered.insert(ordered.end(), m_tetonic_plates.begin(), m_tetonic_plates.end());
         std::map<unsigned int, std::unordered_set<unsigned int>> faces;
-        for(auto plate: ordered) {
+        for (auto plate: ordered) {
             faces.insert({plate, {plate}});
             added.insert(plate);
         }
 
         // generate and assign terrain regions to tectonic plates and make mountains along plate boundaries
-        while(regions.size() != m_base.get_faces().size()) {
+        while(m_regions.size() != m_base.get_faces().size()) {
             std::map<unsigned int, std::unordered_set<unsigned int>> next;
-            for(auto plate : ordered) {
+            for (auto plate : ordered) {
                 next[plate] = {};
-                for(auto face_index: faces[plate]) {
+                for (auto face_index: faces[plate]) {
                     auto &face = m_base.get_faces()[face_index];
-                    regions[face_index].plate = plate;
+                    m_regions[face_index].plate = plate;
                     for (auto[n, e]: face.neighboring_edges) {
                         if (added.contains(n)) {
-                            if(regions[n].plate != plate)
-                                mountains.insert(n);
+                            if(m_regions[n].plate != plate)
+                                m_mountains.insert(n);
                         } else {
                             bool found{false};
                             for(auto [k, v]: next) {
@@ -178,9 +176,9 @@ namespace mapgen {
             faces = next;
         }
 
-        for (auto [index, region]: regions) {
+        for (auto [index, region]: m_regions) {
             auto& face = m_base.get_faces()[index];
-            if (!ocean.contains(index) && !mountains.contains(index)) {
+            if (!m_oceans.contains(index) && !m_mountains.contains(index)) {
                 auto nearest_index = find_nearest_mountain_face_recursive(index);
                 if (nearest_index != index) {
                     auto nearest = m_base.get_faces()[nearest_index];
@@ -189,7 +187,7 @@ namespace mapgen {
                     if (d > 5.0)
                         region.elevation *= 2.0 / glm::log(d + glm::exp(1));
                     else
-                        region.elevation = regions[nearest_index].elevation; // turn into plateau if close enough
+                        region.elevation = m_regions[nearest_index].elevation; // turn into plateau if close enough
                 }
             }
         }
@@ -197,20 +195,20 @@ namespace mapgen {
         // generate meshes
         Mesh mesh;
         std::unordered_map<std::string, unsigned int> added_points;
-        for (auto [index, region]: regions) {
-            if (!ocean.contains(index))
-                region.elevation *= 200;
+        for (auto [index, region]: m_regions) {
             auto ocean_color = glm::vec3(0, 0, 1);
             auto land_color = glm::vec3(.5, .3, .1);
             auto mountain_color = glm::vec3(.6, .6, .6);
             auto mountain_top_color = glm::vec3(1, 1, 1);
             auto color = ocean_color;
-            if (region.elevation > 0)
-                color = land_color + glm::vec3(.2, .4, .4) / (float)region.elevation;
-            if (region.elevation > 80)
-                color = mountain_color;
-            if (region.elevation > 200)
-                color = mountain_top_color;
+            if (!m_oceans.contains(index)) {
+                region.elevation *= 200;
+                color = land_color;
+                if (region.elevation > 120)
+                    color = mountain_color;
+                if (region.elevation > 200)
+                    color = mountain_top_color;
+            }
             auto& face = m_base.get_faces()[index];
             mesh.vertices.emplace_back(face.site.x, region.elevation, face.site.y);
             mesh.colors.push_back(color);
@@ -242,7 +240,7 @@ namespace mapgen {
         });
         // register physics data
         m_mesh = std::make_shared<btTriangleMesh>();
-        for(auto i = 0; i < mesh.indices.size(); i += 3) {
+        for (auto i = 0; i < mesh.indices.size(); i += 3) {
             auto v1 = glm2bt(mesh.vertices[mesh.indices[i]]);
             auto v2 = glm2bt(mesh.vertices[mesh.indices[i + 1]]);
             auto v3 = glm2bt(mesh.vertices[mesh.indices[i + 2]]);
@@ -256,16 +254,18 @@ namespace mapgen {
     void Terrain::assign_ocean(unsigned int start, int neighbor_depth) {
         if (neighbor_depth == 0)
             return;
-        ocean.insert(start);
-        for (auto[neighbor, edge]: m_base.get_faces()[start].neighboring_edges)
-            assign_ocean(neighbor, neighbor_depth - 1);
+        m_oceans.insert(start);
+        for (auto[neighbor, edge]: m_base.get_faces()[start].neighboring_edges) {
+            if (!m_oceans.contains(neighbor) && !m_base.on_hull(neighbor))
+                assign_ocean(neighbor, neighbor_depth - 1);
+        }
     }
 
     unsigned int Terrain::find_nearest_mountain_face(unsigned int index) {
         auto distance = std::numeric_limits<double>::infinity();
         auto face = m_base.get_faces()[index];
         auto found = index;
-        for (auto i: mountains) {
+        for (auto i: m_mountains) {
             if (index != i) {
                 auto mountain_face = m_base.get_faces()[i];
                 auto d = glm::distance(face.site, mountain_face.site);
@@ -279,7 +279,7 @@ namespace mapgen {
     }
 
     unsigned int Terrain::find_nearest_mountain_face_recursive(unsigned int index) {
-        if(mountains.empty())
+        if(m_mountains.empty())
             return index;
         auto face = m_base.get_faces()[index];
         auto neighbors = face.neighboring_edges;
@@ -288,7 +288,7 @@ namespace mapgen {
         auto distance = std::numeric_limits<double>::infinity();
         auto found = index;
         for (auto[n, e]: neighbors) {
-            if (mountains.contains(n) && glm::distance(face.site, m_base.get_faces()[n].site) < distance) {
+            if (m_mountains.contains(n) && glm::distance(face.site, m_base.get_faces()[n].site) < distance) {
                 found = n;
                 distance = glm::distance(face.site, m_base.get_faces()[n].site);
             }
@@ -313,7 +313,7 @@ namespace mapgen {
         auto base = m_base.get_faces()[index];
         for (auto i: to_search) {
             auto face = m_base.get_faces()[i];
-            if (mountains.contains(i) && glm::distance(face.site, base.site) < distance) {
+            if (m_mountains.contains(i) && glm::distance(face.site, base.site) < distance) {
                 found = i;
                 distance = glm::distance(face.site, base.site);
             }
@@ -328,7 +328,50 @@ namespace mapgen {
         return found;
     }
 
-    std::vector<glm::vec3> Terrain::get_mouse_terrain_collision(float x, float y, const RenderContext& context) const {
+    glm::vec3 Terrain::get_mouse_terrain_collision(float x, float y, const RenderContext& context) const {
+        if(m_mesh == nullptr || m_shape == nullptr) {
+            return {};
+        }
+        auto cam = context.camera;
+        auto position = cam->get_position();
+        auto aspect = context.screen_width/context.screen_height;
+        auto perspective = glm::perspective(context.fovy, aspect, context.z_near, context.z_far);
+        glm::vec3 from{
+                2.0 * (x - context.screen_width / 2) / context.screen_width,
+                2.0 * (context.screen_height / 2 - y) / context.screen_height, 0};
+        auto transformation = glm::inverse(perspective * cam->get_view()) * glm::translate(glm::mat4(1), from);
+        glm::vec3 scale, skew;
+        glm::vec4 persp;
+        glm::quat rotation;
+        glm::decompose(transformation, scale, rotation, from, skew, persp);
+        auto to = from + (from - position) * context.z_far;
+
+        btVector3 btFrom{from.x, from.y, from.z};
+        btVector3 btTo{to.x, to.y, to.z};
+
+        struct MyRaycastCallback : public btTriangleRaycastCallback {
+        public:
+            int m_index{-1};
+
+            MyRaycastCallback(const btVector3& from, const btVector3& to)
+                    : btTriangleRaycastCallback(from, to) {}
+
+            btScalar reportHit(const btVector3& hitNormalLocal, btScalar hitFraction, int partId, int triangleIndex)
+            override {
+                m_index = triangleIndex;
+                if(hitFraction < m_hitFraction)
+                    return hitFraction;
+                return m_hitFraction;
+            }
+        } res{btFrom, btTo};
+
+        m_shape->performRaycast(&res, btFrom, btTo);
+        if(res.m_index != -1)
+            return from + res.m_hitFraction*(from - to);
+        throw std::runtime_error("Mouse doesn't collide with terrain");
+    }
+
+    std::vector<glm::vec3> Terrain::get_mouse_terrain_colliding_triangle(float x, float y, const RenderContext& context) const {
         if(m_mesh == nullptr || m_shape == nullptr) {
             return {};
         }
@@ -382,6 +425,40 @@ namespace mapgen {
             return verts;
         }
         return {};
+    }
+
+    Mesh Terrain::get_face_mesh(unsigned int index, glm::vec3 color) {
+        assert(index < m_base.get_faces().size());
+        Mesh mesh;
+        auto& face = m_base.get_faces()[index];
+        mesh.vertices.emplace_back(face.site.x, 0, face.site.y);
+        mesh.colors.push_back(color);
+
+        std::map<double, unsigned int> neighbors;
+        for (auto[n, e]: face.neighboring_edges) {
+            auto& neighbor = m_base.get_faces()[n];
+            neighbors[std::atan2(
+                    neighbor.site.y - face.site.y,
+                    neighbor.site.x - face.site.x)] = n;
+        }
+        auto last_angle = glm::two_pi<double>();
+        for (auto[angle, n1]: neighbors) {
+            auto& neighbor = m_base.get_faces()[n1];
+            int i = mesh.vertices.size();
+            mesh.vertices.emplace_back(neighbor.site.x, 0, neighbor.site.y);
+            mesh.colors.push_back(color);
+            if (last_angle != glm::two_pi<double>()) {
+                auto n2 = neighbors[last_angle];
+                mesh.indices.push_back(0);
+                mesh.indices.push_back(i);
+                mesh.indices.push_back(i - 1);
+            }
+            last_angle = angle;
+        }
+        mesh.indices.push_back(0);
+        mesh.indices.push_back(mesh.vertices.size() - 1);
+        mesh.indices.push_back(1);
+        return mesh;
     }
 
 } // namespace mapgen
