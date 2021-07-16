@@ -16,7 +16,7 @@ namespace mapgen {
 
     int Diagram::add_face(glm::vec2 site) {
         auto index = m_faces.size();
-        m_faces.emplace_back(site);
+        m_faces.emplace_back(site, index);
         return index;
     }
 

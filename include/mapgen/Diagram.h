@@ -22,8 +22,9 @@ namespace mapgen {
         struct Face {
             PTR(Face);
 
-            explicit Face(glm::vec2 site) : site(site), neighboring_edges() {}
+            explicit Face(glm::vec2 site, unsigned int index) : id(index), site(site), neighboring_edges() {}
 
+            unsigned int id;
             glm::vec2 site;
             // edge indices in a map indexed by the corresponding neighbors face index
             std::unordered_map<unsigned int, unsigned int> neighboring_edges;

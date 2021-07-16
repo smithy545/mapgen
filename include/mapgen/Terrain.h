@@ -9,20 +9,21 @@
 #include <engine/Mesh.h>
 #include <engine/RenderContext.h>
 #include <entt/entt.hpp>
-#include <map>
 #include <mapgen/Diagram.h>
 #include <string>
 #include <unordered_set>
 #include <utils/macros.h>
+#include <vector>
 
 
 using namespace engine;
 
 namespace mapgen {
     struct TerrainRegion {
-        unsigned int face;
+        const Diagram::Face& face;
         double elevation{0.0};
-        unsigned int plate;
+        int plate_id{-1};
+        int level{0};
     };
 
     class Terrain {
@@ -48,21 +49,14 @@ namespace mapgen {
         std::unordered_set<unsigned int> m_mountains;
         std::unordered_set<unsigned int> m_oceans;
         std::unordered_set<unsigned int> m_rivers;
-        std::unordered_set<unsigned int> m_tetonic_plates;
-        std::map<unsigned int, TerrainRegion> m_regions;
+        std::vector<TerrainRegion> m_regions;
         std::shared_ptr<btBvhTriangleMeshShape> m_shape{nullptr};
         std::shared_ptr<btCollisionObject> m_body{nullptr};
         std::shared_ptr<btTriangleMesh> m_mesh{nullptr};
 
         void assign_ocean(unsigned int start, int neighbor_depth);
 
-        unsigned int find_nearest_mountain_face(unsigned int index);
-
-        // TODO: add parameter to recursive search to stop searching after reaching neighbors 'X' hops away from index
-        unsigned int find_nearest_mountain_face_recursive(unsigned int index);
-
-        unsigned int find_mountain_kernel(unsigned int index, const std::unordered_set<unsigned int> &to_search,
-                                          std::unordered_set<unsigned int> searched);
+        unsigned int find_nearest_mountain_face(unsigned int index, int& path_length);
 
     VAR_GET(entt::entity, entity, public){entt::null};
     VAR_GET(Diagram, base, public);

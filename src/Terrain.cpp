@@ -16,6 +16,7 @@
 #include <random>
 #include <stdexcept>
 #include <unordered_map>
+#include <unordered_set>
 #include <utils/math_util.h>
 #include <utility>
 #include <vector>
@@ -48,13 +49,145 @@ namespace mapgen {
         m_base = DelaunatorAlgorithm::construct_voroni_diagram(coords);
         m_dual = m_base.dual();
 
-        // randomly choose tectonic plate origins from faces
-        while (m_tetonic_plates.size() < num_tectonic_plates)
-            m_tetonic_plates.insert(rand() % m_base.get_faces().size());
-
         // assign ocean tiles
         for (auto index: m_base.get_hull())
             assign_ocean(index, 2);
+
+        // generate terrain regions
+        for (const auto& face: m_base.get_faces())
+            m_regions.push_back(TerrainRegion{face});
+
+        // assign layers where each layer's invariant is the distance to the closest ocean site
+        std::unordered_set<unsigned int> added;
+        std::unordered_set<unsigned int> layer;
+        for (auto index: m_oceans) {
+            layer.insert(index);
+            added.insert(index);
+        }
+        auto level = 0;
+        do {
+            std::unordered_set<unsigned int> next_layer;
+            for (auto i: layer) {
+                m_regions[i].level = level;
+                for (auto[n, e]: m_base.get_faces()[i].neighboring_edges) {
+                    if (!added.contains(n)) {
+                        next_layer.insert(n);
+                        added.insert(n);
+                    }
+                }
+            }
+            layer = next_layer;
+            level += 1;
+        } while (!layer.empty());
+
+        // randomly choose tectonic plate origins from faces
+        std::vector<unsigned int> tectonic_plates;
+        while (tectonic_plates.size() < num_tectonic_plates) {
+            auto index = rand() % m_base.get_faces().size();
+            if(m_regions[index].plate_id == -1) {
+                m_regions[index].plate_id = tectonic_plates.size();
+                tectonic_plates.push_back(index);
+            }
+        }
+
+        // assign terrain regions to tectonic plates and make mountains along plate boundaries
+        int num_added = tectonic_plates.size();
+        while(num_added < m_regions.size()) {
+            std::vector<unsigned int> next;
+            for (auto index : tectonic_plates) {
+                auto& region = m_regions[index];
+                for (auto[n, e]: region.face.neighboring_edges) {
+                    if (m_regions[n].plate_id == -1) {
+                        m_regions[n].plate_id = region.plate_id;
+                        num_added++;
+                        next.push_back(n);
+                    } else if(!m_oceans.contains(n) // no mountain/ocean combo tiles
+                    && m_regions[n].plate_id != region.plate_id // mountains only on tectonic plate boundaries
+                    && m_regions[n].level > 2) // no mountains on beach
+                        m_mountains.insert(n);
+                }
+            }
+            tectonic_plates = next;
+        }
+
+        int mountain_size = 2;
+        for (auto i = 0; i < m_regions.size(); i++) {
+            auto &region = m_regions[i];
+            if (m_oceans.contains(i)) {
+                region.elevation = 0.0;
+            } else if (m_mountains.contains(i)) {
+                region.elevation = 1.0;
+            } else {
+                int path_length;
+                auto mountain_index = find_nearest_mountain_face(i, path_length);
+                auto mountain_region = m_regions[mountain_index];
+                if(path_length > mountain_size)
+                    region.elevation = (0.2 * region.level) / level;
+                else {
+                    auto d = (10.0 * (path_length - 1)) / mountain_size;
+                    region.elevation = 0.8 / glm::log(d + glm::exp(1));
+                    std::cout << d << "   \t:\t" << region.elevation << std::endl;
+                }
+            }
+        }
+    }
+
+    void Terrain::register_terrain_mesh(entt::registry &registry) {
+        Mesh mesh;
+        std::unordered_map<std::string, unsigned int> added_points;
+        for (auto region: m_regions) {
+            auto ocean_color = glm::vec3(0, 0, 1);
+            auto land_color = glm::vec3(.5, .3, .1);
+            auto mountain_color = glm::vec3(.6, .6, .6);
+            auto mountain_top_color = glm::vec3(1, 1, 1);
+            auto color = ocean_color;
+            if (!m_oceans.contains(region.face.id)) {
+                color = land_color + mountain_color * static_cast<float>(region.elevation)/2.f;
+                region.elevation *= 200;
+                if (region.elevation > 120)
+                    color = mountain_color;
+                if (region.elevation >= 180)
+                    color = mountain_top_color;
+            }
+            mesh.vertices.emplace_back(region.face.site.x, region.elevation, region.face.site.y);
+            mesh.colors.push_back(color);
+
+            std::map<double, unsigned int> neighbors;
+            for (auto[n, e]: region.face.neighboring_edges) {
+                auto& neighbor = m_base.get_faces()[n];
+                neighbors[std::atan2(
+                        neighbor.site.y - region.face.site.y,
+                        neighbor.site.x - region.face.site.x)] = n;
+            }
+            auto last_angle = glm::two_pi<double>();
+            for (auto[angle, n1]: neighbors) {
+                if (last_angle != glm::two_pi<double>()) {
+                    auto n2 = neighbors[last_angle];
+                    mesh.indices.push_back(region.face.id);
+                    mesh.indices.push_back(n1);
+                    mesh.indices.push_back(n2);
+                }
+                last_angle = angle;
+            }
+        }
+
+        m_entity = registry.create();
+        registry.emplace_or_replace<Mesh>(m_entity, mesh);
+        registry.patch<InstanceList>(m_entity, [](auto &instance_list) {
+            instance_list.set_instances(std::vector<glm::mat4>{glm::mat4(1)});
+        });
+
+        // register physics data
+        m_mesh = std::make_shared<btTriangleMesh>();
+        for (auto i = 0; i < mesh.indices.size(); i += 3) {
+            auto v1 = glm2bt(mesh.vertices[mesh.indices[i]]);
+            auto v2 = glm2bt(mesh.vertices[mesh.indices[i + 1]]);
+            auto v3 = glm2bt(mesh.vertices[mesh.indices[i + 2]]);
+            m_mesh->addTriangle(v1, v2, v3);
+        }
+        m_shape = std::make_shared<btBvhTriangleMeshShape>(m_mesh.get(), true);
+        m_body = std::make_shared<btCollisionObject>();
+        m_body->setCollisionShape(m_shape.get());
     }
 
     void Terrain::register_voroni_debug_mesh(entt::registry &registry) {
@@ -104,153 +237,6 @@ namespace mapgen {
         });
     }
 
-    void Terrain::register_terrain_mesh(entt::registry &registry) {
-        // generate terrain regions
-        for (unsigned int i = 0; i < m_base.get_faces().size(); i++) {
-            m_regions.insert({i, TerrainRegion{i}});
-        }
-
-        // assign layers where each layer's invariant is the distance to the closest ocean site
-        std::unordered_set<unsigned int> added;
-        std::unordered_set<unsigned int> layer;
-        for (auto index: m_oceans) {
-            for (auto[n, e]: m_base.get_faces()[index].neighboring_edges) {
-                layer.insert(n);
-                added.insert(n);
-            }
-        }
-
-        auto level = 0.0;
-        do {
-            std::unordered_set<unsigned int> next_layer;
-            for (auto i: layer) {
-                m_regions[i].elevation = level;
-                for (auto[n, e]: m_base.get_faces()[i].neighboring_edges) {
-                    if (!added.contains(n)) {
-                        next_layer.insert(n);
-                        added.insert(n);
-                    }
-                }
-            }
-            layer = next_layer;
-            level += 1;
-        } while (!layer.empty());
-
-        // create tectonic plates
-        added.clear();
-        std::vector<unsigned int> ordered;
-        ordered.insert(ordered.end(), m_tetonic_plates.begin(), m_tetonic_plates.end());
-        std::map<unsigned int, std::unordered_set<unsigned int>> faces;
-        for (auto plate: ordered) {
-            faces.insert({plate, {plate}});
-            added.insert(plate);
-        }
-
-        // generate and assign terrain regions to tectonic plates and make mountains along plate boundaries
-        while(m_regions.size() != m_base.get_faces().size()) {
-            std::map<unsigned int, std::unordered_set<unsigned int>> next;
-            for (auto plate : ordered) {
-                next[plate] = {};
-                for (auto face_index: faces[plate]) {
-                    auto &face = m_base.get_faces()[face_index];
-                    m_regions[face_index].plate = plate;
-                    for (auto[n, e]: face.neighboring_edges) {
-                        if (added.contains(n)) {
-                            if(m_regions[n].plate != plate)
-                                m_mountains.insert(n);
-                        } else {
-                            bool found{false};
-                            for(auto [k, v]: next) {
-                                if(k != plate && v.contains(n)) {
-                                    found = true;
-                                    break;
-                                }
-                            }
-                            if(!found)
-                                next[plate].insert(n);
-                            added.insert(n);
-                        }
-                    }
-                }
-            }
-            faces = next;
-        }
-
-        for (auto [index, region]: m_regions) {
-            auto& face = m_base.get_faces()[index];
-            if (!m_oceans.contains(index) && !m_mountains.contains(index)) {
-                auto nearest_index = find_nearest_mountain_face_recursive(index);
-                if (nearest_index != index) {
-                    auto nearest = m_base.get_faces()[nearest_index];
-                    auto d = glm::distance(nearest.site, face.site);
-                    // scale height inverse logarithmically to distance from mountains (range 0-1 when shifting x by e)
-                    if (d > 5.0)
-                        region.elevation *= 2.0 / glm::log(d + glm::exp(1));
-                    else
-                        region.elevation = m_regions[nearest_index].elevation; // turn into plateau if close enough
-                }
-            }
-        }
-
-        // generate meshes
-        Mesh mesh;
-        std::unordered_map<std::string, unsigned int> added_points;
-        for (auto [index, region]: m_regions) {
-            auto ocean_color = glm::vec3(0, 0, 1);
-            auto land_color = glm::vec3(.5, .3, .1);
-            auto mountain_color = glm::vec3(.6, .6, .6);
-            auto mountain_top_color = glm::vec3(1, 1, 1);
-            auto color = ocean_color;
-            if (!m_oceans.contains(index)) {
-                region.elevation *= 200;
-                color = land_color;
-                if (region.elevation > 120)
-                    color = mountain_color;
-                if (region.elevation > 200)
-                    color = mountain_top_color;
-            }
-            auto& face = m_base.get_faces()[index];
-            mesh.vertices.emplace_back(face.site.x, region.elevation, face.site.y);
-            mesh.colors.push_back(color);
-
-            std::map<double, unsigned int> neighbors;
-            for (auto[n, e]: face.neighboring_edges) {
-                auto& neighbor = m_base.get_faces()[n];
-                neighbors[std::atan2(
-                        neighbor.site.y - face.site.y,
-                        neighbor.site.x - face.site.x)] = n;
-            }
-            auto last_angle = glm::two_pi<double>();
-            for (auto[angle, n1]: neighbors) {
-                if (last_angle != glm::two_pi<double>()) {
-                    auto n2 = neighbors[last_angle];
-                    mesh.indices.push_back(index);
-                    mesh.indices.push_back(n1);
-                    mesh.indices.push_back(n2);
-                }
-                last_angle = angle;
-            }
-        }
-
-        m_entity = registry.create();
-        // register render data
-        registry.emplace_or_replace<Mesh>(m_entity, mesh);
-        registry.patch<InstanceList>(m_entity, [](auto &instance_list) {
-            instance_list.set_instances(std::vector<glm::mat4>{glm::mat4(1)});
-        });
-        // register physics data
-        m_mesh = std::make_shared<btTriangleMesh>();
-        for (auto i = 0; i < mesh.indices.size(); i += 3) {
-            auto v1 = glm2bt(mesh.vertices[mesh.indices[i]]);
-            auto v2 = glm2bt(mesh.vertices[mesh.indices[i + 1]]);
-            auto v3 = glm2bt(mesh.vertices[mesh.indices[i + 2]]);
-            m_mesh->addTriangle(v1, v2, v3);
-        }
-        m_shape = std::make_shared<btBvhTriangleMeshShape>(m_mesh.get(), true);
-        m_body = std::make_shared<btCollisionObject>();
-        m_body->setCollisionShape(m_shape.get());
-    }
-
     void Terrain::assign_ocean(unsigned int start, int neighbor_depth) {
         if (neighbor_depth == 0)
             return;
@@ -261,70 +247,40 @@ namespace mapgen {
         }
     }
 
-    unsigned int Terrain::find_nearest_mountain_face(unsigned int index) {
-        auto distance = std::numeric_limits<double>::infinity();
-        auto face = m_base.get_faces()[index];
-        auto found = index;
-        for (auto i: m_mountains) {
-            if (index != i) {
-                auto mountain_face = m_base.get_faces()[i];
-                auto d = glm::distance(face.site, mountain_face.site);
-                if (found == index || d < distance) {
-                    found = i;
-                    distance = d;
-                }
-            }
-        }
-        return found;
-    }
-
-    unsigned int Terrain::find_nearest_mountain_face_recursive(unsigned int index) {
-        if(m_mountains.empty())
+    unsigned int Terrain::find_nearest_mountain_face(unsigned int index, int& path_length) {
+        assert(!m_mountains.empty());
+        if(m_mountains.contains(index))
             return index;
-        auto face = m_base.get_faces()[index];
-        auto neighbors = face.neighboring_edges;
-        std::unordered_set<unsigned int> next{};
+        std::unordered_set<unsigned int> layer;
         std::unordered_set<unsigned int> searched{index};
-        auto distance = std::numeric_limits<double>::infinity();
-        auto found = index;
-        for (auto[n, e]: neighbors) {
-            if (m_mountains.contains(n) && glm::distance(face.site, m_base.get_faces()[n].site) < distance) {
-                found = n;
-                distance = glm::distance(face.site, m_base.get_faces()[n].site);
-            }
-            searched.insert(n);
-            for (auto[n2, e2]: m_base.get_faces()[n].neighboring_edges) {
-                if (!searched.contains(n2))
-                    next.insert(n2);
-            }
-        }
-        if (found == index)
-            return find_mountain_kernel(index, next, searched);
-        return found;
-    }
-
-    unsigned int Terrain::find_mountain_kernel(unsigned int index, const std::unordered_set<unsigned int> &to_search,
-                                               std::unordered_set<unsigned int> searched) {
-        if (searched.size() == m_base.get_faces().size())
-            return index;
-        std::unordered_set<unsigned int> next{};
-        auto distance = std::numeric_limits<double>::infinity();
-        auto found = index;
+        auto min_distance = std::numeric_limits<double>::infinity();
         auto base = m_base.get_faces()[index];
-        for (auto i: to_search) {
-            auto face = m_base.get_faces()[i];
-            if (m_mountains.contains(i) && glm::distance(face.site, base.site) < distance) {
-                found = i;
-                distance = glm::distance(face.site, base.site);
+        for(auto [n, e]: base.neighboring_edges)
+            layer.insert(n);
+        unsigned int found{index};
+        int level{0};
+        while(found == index && searched.size() < m_regions.size()) {
+            level++;
+            std::unordered_set<unsigned int> next;
+            for (auto i: layer) {
+                auto face = m_base.get_faces()[i];
+                if (m_mountains.contains(i)) {
+                    auto distance = glm::distance(face.site, base.site);
+                    if (distance < min_distance) {
+                        found = i;
+                        min_distance = distance;
+                    }
+                } else {
+                    for(auto [n, e]: face.neighboring_edges) {
+                        if(!searched.contains(n))
+                            next.insert(n);
+                    }
+                }
+                searched.insert(i);
             }
-            searched.insert(i);
-            for (auto[n, e]: face.neighboring_edges) {
-                if (!searched.contains(n))
-                    next.insert(n);
-            }
+            layer = next;
         }
-        if (found == index)
-            find_mountain_kernel(index, next, searched);
+        path_length = level;
         return found;
     }
 
