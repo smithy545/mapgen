@@ -189,6 +189,32 @@ namespace mapgen {
         m_body->setCollisionShape(m_shape.get());
     }
 
+    entt::entity Terrain::register_region_mesh(entt::registry &registry) {
+        Mesh mesh;
+        std::unordered_map<std::string, unsigned int> added_points;
+        for (auto region: m_regions) {
+            if (!m_oceans.contains(region.face.id))
+                region.elevation *= 200;
+
+            mesh.vertices.emplace_back(region.face.site.x, region.elevation, region.face.site.y);
+            mesh.colors.emplace_back(0,0,0);
+
+            std::map<double, unsigned int> neighbors;
+            for (auto[n, e]: region.face.neighboring_edges) {
+                mesh.indices.push_back(mesh.vertices.size()-1);
+                mesh.indices.push_back(n);
+            }
+        }
+
+        auto region_entity = registry.create();
+        registry.emplace_or_replace<Mesh>(region_entity, mesh);
+        registry.patch<InstanceList>(region_entity, [](auto &instance_list) {
+            instance_list.set_instances(std::vector<glm::mat4>{glm::mat4(1)});
+            instance_list.render_strategy = GL_LINES;
+        });
+        return region_entity;
+    }
+
     void Terrain::register_voroni_debug_mesh(entt::registry &registry) {
         Mesh edge_mesh, face_mesh, site_mesh;
         for(auto edge: m_base.get_edges()) {

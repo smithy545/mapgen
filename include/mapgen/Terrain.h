@@ -34,6 +34,8 @@ namespace mapgen {
 
         void register_terrain_mesh(entt::registry &registry);
 
+        entt::entity register_region_mesh(entt::registry &registry);
+
         void register_voroni_debug_mesh(entt::registry &registry);
 
         [[nodiscard]]
