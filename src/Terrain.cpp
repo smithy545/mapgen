@@ -195,71 +195,47 @@ namespace mapgen {
         for (auto region: m_regions) {
             if (!m_oceans.contains(region.face.id))
                 region.elevation *= 200;
-
             mesh.vertices.emplace_back(region.face.site.x, region.elevation, region.face.site.y);
             mesh.colors.emplace_back(0,0,0);
-
-            std::map<double, unsigned int> neighbors;
             for (auto[n, e]: region.face.neighboring_edges) {
-                mesh.indices.push_back(mesh.vertices.size()-1);
-                mesh.indices.push_back(n);
+                if(n > region.face.id) {
+                    mesh.indices.push_back(mesh.vertices.size() - 1);
+                    mesh.indices.push_back(n);
+                }
             }
         }
-
-        auto region_entity = registry.create();
-        registry.emplace_or_replace<Mesh>(region_entity, mesh);
-        registry.patch<InstanceList>(region_entity, [](auto &instance_list) {
+        auto entity = registry.create();
+        registry.emplace_or_replace<Mesh>(entity, mesh);
+        registry.patch<InstanceList>(entity, [](auto &instance_list) {
             instance_list.set_instances(std::vector<glm::mat4>{glm::mat4(1)});
             instance_list.render_strategy = GL_LINES;
         });
-        return region_entity;
+        return entity;
     }
 
-    void Terrain::register_voroni_debug_mesh(entt::registry &registry) {
-        Mesh edge_mesh, face_mesh, site_mesh;
-        for(auto edge: m_base.get_edges()) {
-            auto i = edge_mesh.vertices.size();
-            edge_mesh.vertices.emplace_back(edge.first.x, -1, edge.first.y);
-            edge_mesh.vertices.emplace_back(edge.second.x, -1, edge.second.y);
-            edge_mesh.colors.emplace_back(0,0,1);
-            edge_mesh.colors.emplace_back(0,0,1);
-            edge_mesh.indices.push_back(i++);
-            edge_mesh.indices.push_back(i);
-        }
-        auto e1 = registry.create();
-        registry.emplace_or_replace<Mesh>(e1, edge_mesh);
-        registry.patch<InstanceList>(e1, [](auto &instance_list) {
-            instance_list.set_instances(std::vector<glm::mat4>{glm::mat4(1)});
-            instance_list.render_strategy = GL_LINES;
-        });
+    entt::entity Terrain::register_voroni_mesh(entt::registry &registry) {
+        Mesh face_mesh;
         for(const auto &face: m_base.get_faces()) {
             for(auto [n, e]: face.neighboring_edges) {
-                auto edge = m_base.get_edges()[e];
-                auto i = face_mesh.vertices.size();
-                face_mesh.vertices.emplace_back(edge.first.x, 0, edge.first.y);
-                face_mesh.vertices.emplace_back(edge.second.x, 0, edge.second.y);
-                face_mesh.colors.emplace_back(1, 1, 0);
-                face_mesh.colors.emplace_back(1, 1, 0);
-                face_mesh.indices.push_back(i++);
-                face_mesh.indices.push_back(i);
+                if(n > face.id) {
+                    auto edge = m_base.get_edges()[e];
+                    auto i = face_mesh.vertices.size();
+                    face_mesh.vertices.emplace_back(edge.first.x, 0, edge.first.y);
+                    face_mesh.vertices.emplace_back(edge.second.x, 0, edge.second.y);
+                    face_mesh.colors.emplace_back(1, 1, 0);
+                    face_mesh.colors.emplace_back(1, 1, 0);
+                    face_mesh.indices.push_back(i++);
+                    face_mesh.indices.push_back(i);
+                }
             }
-            auto i = site_mesh.vertices.size();
-            site_mesh.vertices.emplace_back(face.site.x, 0, face.site.y);
-            site_mesh.colors.emplace_back(1,0,0);
-            site_mesh.indices.push_back(i);
         }
-        auto e2 = registry.create();
-        registry.emplace_or_replace<Mesh>(e2, face_mesh);
-        registry.patch<InstanceList>(e2, [](auto &instance_list) {
+        auto entity = registry.create();
+        registry.emplace_or_replace<Mesh>(entity, face_mesh);
+        registry.patch<InstanceList>(entity, [](auto &instance_list) {
             instance_list.set_instances(std::vector<glm::mat4>{glm::mat4(1)});
             instance_list.render_strategy = GL_LINES;
         });
-        auto e3 = registry.create();
-        registry.emplace_or_replace<Mesh>(e3, site_mesh);
-        registry.patch<InstanceList>(e3, [](auto &instance_list) {
-            instance_list.set_instances(std::vector<glm::mat4>{glm::mat4(1)});
-            instance_list.render_strategy = GL_POINTS;
-        });
+        return entity;
     }
 
     void Terrain::assign_ocean(unsigned int start, int neighbor_depth) {

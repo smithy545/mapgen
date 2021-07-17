@@ -36,7 +36,7 @@ namespace mapgen {
 
         entt::entity register_region_mesh(entt::registry &registry);
 
-        void register_voroni_debug_mesh(entt::registry &registry);
+        entt::entity register_voroni_mesh(entt::registry &registry);
 
         [[nodiscard]]
         glm::vec3 get_mouse_terrain_collision(float x, float y, const RenderContext& context) const;
