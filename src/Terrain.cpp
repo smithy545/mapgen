@@ -47,7 +47,7 @@ namespace mapgen {
             coords.push_back(v.y);
         }
         m_base = DelaunatorAlgorithm::construct_voroni_diagram(coords);
-        m_dual = m_base.dual();
+        m_dual = DelaunatorAlgorithm::construct_delauney_diagram(coords);
 
         // assign ocean tiles
         for (auto index: m_base.get_hull())
@@ -110,6 +110,7 @@ namespace mapgen {
             tectonic_plates = next;
         }
 
+        // assign elevations the best I can
         int mountain_size = 2;
         for (auto i = 0; i < m_regions.size(); i++) {
             auto &region = m_regions[i];
@@ -119,14 +120,12 @@ namespace mapgen {
                 region.elevation = 1.0;
             } else {
                 int path_length;
-                auto mountain_index = find_nearest_mountain_face(i, path_length);
-                auto mountain_region = m_regions[mountain_index];
+                find_nearest_mountain_face(i, path_length);
                 if(path_length > mountain_size)
                     region.elevation = (0.2 * region.level) / level;
                 else {
                     auto d = (10.0 * (path_length - 1)) / mountain_size;
                     region.elevation = 0.8 / glm::log(d + glm::exp(1));
-                    std::cout << d << "   \t:\t" << region.elevation << std::endl;
                 }
             }
         }
