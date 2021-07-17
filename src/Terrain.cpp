@@ -344,7 +344,7 @@ namespace mapgen {
         glm::vec4 persp;
         glm::quat rotation;
         glm::decompose(transformation, scale, rotation, from, skew, persp);
-        auto to = from + (from - position) * context.z_far;
+        auto to = from + glm::normalize(from - position) * context.z_far;
 
         btVector3 btFrom{from.x, from.y, from.z};
         btVector3 btTo{to.x, to.y, to.z};
