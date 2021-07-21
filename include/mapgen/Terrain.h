@@ -6,9 +6,10 @@
 #define MAPGEN_TERRAIN_H
 
 #include <btBulletCollisionCommon.h>
-#include <engine/Mesh.h>
+#include <engine/mesh.h>
 #include <engine/RenderContext.h>
 #include <entt/entt.hpp>
+#include <functional>
 #include <mapgen/Diagram.h>
 #include <string>
 #include <unordered_set>
@@ -21,20 +22,25 @@ using namespace engine;
 namespace mapgen {
     struct TerrainRegion {
         const Diagram::Face& face;
-        double elevation{0.0};
+        float elevation{0.0};
+        float moisture{0.0};
         int plate_id{-1};
-        int level{0};
+        int sea_level{0};
     };
 
     class Terrain {
     public:
         PTR(Terrain);
 
-        Terrain(unsigned int num_sites, int width, int height, int num_tectonic_plates = 1, bool centered = false);
+        Terrain(unsigned int num_sites,
+                int width,
+                int height,
+                int num_tectonic_plates = 1,
+                glm::vec2 wind_direction = glm::vec2(1,0));
 
-        void register_terrain_mesh(entt::registry &registry);
+        void register_mesh(entt::registry &registry);
 
-        entt::entity register_region_mesh(entt::registry &registry);
+        entt::entity register_wireframe_mesh(entt::registry &registry);
 
         entt::entity register_voroni_mesh(entt::registry &registry);
 
@@ -45,7 +51,7 @@ namespace mapgen {
         std::vector<glm::vec3> get_mouse_terrain_colliding_triangle(float x, float y, const RenderContext& context) const;
 
         [[nodiscard]]
-        Mesh get_face_mesh(unsigned int index, glm::vec3 color);
+        Mesh get_region_mesh(unsigned int index);
 
     private:
         std::unordered_set<unsigned int> m_mountains;
@@ -56,7 +62,21 @@ namespace mapgen {
         std::shared_ptr<btCollisionObject> m_body{nullptr};
         std::shared_ptr<btTriangleMesh> m_mesh{nullptr};
 
-        void assign_ocean(unsigned int start, int neighbor_depth);
+        void assign_ocean_from_hull(int depth);
+
+        void apply_callback_breadth_first(const std::function<void(unsigned int)>& callback,
+                                        unsigned int start,
+                                        int max_depth,
+                                        const std::function<bool(unsigned int)>& predicate =
+                                                [](unsigned int){return true;},
+                                        std::unordered_set<unsigned int> visited = {});
+
+        void apply_callback_breadth_first_recursively(const std::function<void(unsigned int)>& callback,
+                                                      unsigned int start,
+                                                      int max_depth,
+                                                      const std::function<bool(unsigned int)>& predicate =
+                                                              [](unsigned int){return true;},
+                                                      std::unordered_set<unsigned int> visited = {});
 
         unsigned int find_nearest_mountain_face(unsigned int index, int& path_length);
 
