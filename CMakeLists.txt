@@ -2,9 +2,8 @@ cmake_minimum_required(VERSION 3.16)
 set(CMAKE_CXX_STANDARD 20)
 
 add_library(mapgen
-        src/Terrain.cpp
-        src/DelaunatorAlgorithm.cpp
-        src/Diagram.cpp)
+        src/terrain.cpp
+        src/topology.cpp)
 target_link_libraries(mapgen EnTT fmt utils engine BulletCollision BulletDynamics LinearMath)
 target_link_directories(utils PRIVATE /opt/homebrew/Cellar/assimp/5.0.1/lib /opt/homebrew/Cellar/bullet/3.09/lib)
 target_include_directories(mapgen
