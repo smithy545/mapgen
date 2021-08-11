@@ -146,6 +146,30 @@ namespace mapgen {
             tectonic_regions = next;
         }
 
+        // field containing distance to nearest mountain
+        typedef std::pair<float, std::size_t> T;
+        TerrainField<T> mountain_field{
+            *this,
+            std::vector<std::size_t>(m_mountains.begin(), m_mountains.end()),
+            [](const TerrainField<T>& field, const Terrain& terrain, std::size_t index) {
+                if(terrain.is_mountain(index))
+                    return std::pair<float, std::size_t>{0.0f, index};
+
+                std::pair<float, std::size_t> closest_mountain{std::numeric_limits<float>::infinity(), index};
+                for(const auto& [n, e]: terrain.get_region(index).neighborhood) {
+                    if(field.contains(n)) {
+                        auto i = field[n].second;
+                        auto d = glm::distance(terrain.site_at(n), terrain.site_at(index));
+                        if(d < closest_mountain.first) {
+                            closest_mountain.first = d;
+                            closest_mountain.second = i;
+                        }
+                    }
+                }
+                return closest_mountain;
+            }
+        };
+
         // assign elevations based on distance from mountain or distance from ocean (whichever is closer)
         for (auto i = 0; i < m_regions.size(); i++) {
             auto& region = m_regions[i];
@@ -156,12 +180,12 @@ namespace mapgen {
                 region.terrain.elevation = 1.0;
                 region.terrain.humidity = 0.0;
             } else {
-                int path_length;
-                find_nearest_mountain_face(i, path_length);
-                if (path_length > mountain_size)
+                auto closest_mountain = mountain_field[i];
+                auto distance = closest_mountain.first;
+                if (distance > mountain_size)
                     region.terrain.elevation = (0.2f * region.terrain.sea_level) / (level - 1.f);
                 else {
-                    auto d = (10.0 * (path_length - 1)) / mountain_size;
+                    auto d = (10.0 * (distance - 1)) / mountain_size;
                     region.terrain.elevation = 0.8f / glm::log(d + glm::exp(1));
                 }
                 region.terrain.humidity = 1.0 - region.terrain.elevation;
@@ -427,21 +451,44 @@ namespace mapgen {
         utils::file::write_json_file("/civilwar/res/" + filename, data);
     }
 
-    const Region& Terrain::get_region(std::size_t index) const {
-        return m_regions[index];
+    template<typename ValueType, typename SharedDataType>
+    TerrainField<ValueType, SharedDataType>::TerrainField(const Terrain &terrain, SharedDataType &initial,
+                                                          const std::vector<std::size_t> &seeds,
+                                                          const std::function<ValueType(const TerrainField &,
+                                                                                        const Terrain &,
+                                                                                        SharedDataType &,
+                                                                                        std::size_t)> &field,
+                                                          const std::function<bool(const TerrainField &,
+                                                                                   const Terrain &,
+                                                                                   SharedDataType &,
+                                                                                   std::size_t)>& predicate) {
+        std::unordered_set<std::size_t> current{seeds.begin(), seeds.end()}, visited;
+        while(visited.size() < terrain.get_num_regions() && !current.empty()) {
+            std::unordered_set<std::size_t> next;
+            for(auto i: current) {
+                m_values[i] = field(*this, terrain, initial, i);
+                visited.insert(i);
+                for(const auto& [n, e]: terrain.get_region(i).neighborhood) {
+                    if(!visited.contains(n) && !current.contains(n) && predicate(this, terrain, initial, n))
+                        next.insert(n);
+                }
+            }
+            current = next;
+        }
     }
 
     template <typename T, typename D>
     TerrainField<T, D>::TerrainField(const Terrain& terrain,
                                      D& initial,
                                      const std::vector<std::size_t>& seeds,
-                                     const std::function<T(const Terrain& terrain, D&, std::size_t)>& field)
-                                     : m_values(terrain.get_num_regions()) {
+                                     const std::function<T(const TerrainField&,
+                                                           const Terrain& terrain,
+                                                           D&, std::size_t)>& field) {
         std::unordered_set<std::size_t> current{seeds.begin(), seeds.end()}, visited;
         while(visited.size() < terrain.get_num_regions() && !current.empty()) {
             std::unordered_set<std::size_t> next;
             for(auto i: current) {
-                m_values[i] = field(terrain, initial, i);
+                m_values[i] = field(*this, terrain, initial, i);
                 visited.insert(i);
                 for(const auto& [n, e]: terrain.get_region(i).neighborhood) {
                     if(!visited.contains(n) && !current.contains(n))
@@ -455,13 +502,14 @@ namespace mapgen {
     template <typename T, typename D>
     TerrainField<T, D>::TerrainField(const Terrain& terrain,
                                      const std::vector<std::size_t>& seeds,
-                                     const std::function<T(const Terrain& terrain, std::size_t)>& field)
-                                     : m_values(terrain.get_num_regions()) {
+                                     const std::function<T(const TerrainField&,
+                                                           const Terrain& terrain,
+                                                           std::size_t)>& field) {
         std::unordered_set<std::size_t> current{seeds.begin(), seeds.end()}, visited;
         while(visited.size() < terrain.get_num_regions() && !current.empty()) {
             std::unordered_set<std::size_t> next;
             for(auto i: current) {
-                m_values[i] = field(terrain, i);
+                m_values[i] = field(*this, terrain, i);
                 visited.insert(i);
                 for(const auto& [n, e]: terrain.get_region(i).neighborhood) {
                     if(!visited.contains(n) && !current.contains(n))
@@ -470,10 +518,5 @@ namespace mapgen {
             }
             current = next;
         }
-    }
-
-    template<typename T, typename D>
-    const T &TerrainField<T, D>::operator[](std::size_t index) const {
-        return m_values[index];
     }
 } // namespace mapgen
