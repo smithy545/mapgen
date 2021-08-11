@@ -17,7 +17,6 @@
 #include <utils/math_util.h>
 #include <vector>
 
-
 using namespace engine;
 using namespace utils::math;
 
@@ -224,26 +223,24 @@ namespace mapgen {
         auto mountain_color = glm::vec3(.6, .6, .6);
         auto mountain_top_color = glm::vec3(1, 1, 1);
         for (std::size_t i = 0; i < m_delauney.triangles.size(); i += 3) {
-            auto color = ocean_color;
             for(auto j = i; j < i + 3; j++) {
-                auto index = m_delauney.triangles[j];
-                const auto& region = m_regions[index];
-                auto elevation = region.terrain.elevation;
-                auto site = site_at(region.coord_index);
-
-                if (!m_oceans.contains(index)) {
+                auto t = m_delauney.triangles[j];
+                const auto& terrain = m_regions[m_delauney.triangles[j]].terrain;
+                auto elevation = terrain.elevation;
+                auto color = ocean_color;
+                if (!m_oceans.contains(t)) {
                     elevation *= MOUNTAIN_HEIGHT;
-                    if(region.terrain.sea_level == 1 || region.terrain.humidity < .3)
+                    if(terrain.sea_level == 1 || terrain.humidity < .3)
                         color = desert_color;
                     else
-                        color = grassland_color * region.terrain.humidity;
+                        color = grassland_color * terrain.humidity;
                     if (elevation > .6f * MOUNTAIN_HEIGHT)
                         color = mountain_color;
                     if (elevation >= .9f * MOUNTAIN_HEIGHT)
                         color = mountain_top_color;
                 }
 
-                mesh.vertices.emplace_back(site.x, elevation, site.y);
+                mesh.vertices.emplace_back(m_voroni_sites[2*t], elevation, m_voroni_sites[2*t + 1]);
                 mesh.colors.push_back(color);
                 mesh.indices.push_back(j);
             }
@@ -430,4 +427,53 @@ namespace mapgen {
         utils::file::write_json_file("/civilwar/res/" + filename, data);
     }
 
+    const Region& Terrain::get_region(std::size_t index) const {
+        return m_regions[index];
+    }
+
+    template <typename T, typename D>
+    TerrainField<T, D>::TerrainField(const Terrain& terrain,
+                                     D& initial,
+                                     const std::vector<std::size_t>& seeds,
+                                     const std::function<T(const Terrain& terrain, D&, std::size_t)>& field)
+                                     : m_values(terrain.get_num_regions()) {
+        std::unordered_set<std::size_t> current{seeds.begin(), seeds.end()}, visited;
+        while(visited.size() < terrain.get_num_regions() && !current.empty()) {
+            std::unordered_set<std::size_t> next;
+            for(auto i: current) {
+                m_values[i] = field(terrain, initial, i);
+                visited.insert(i);
+                for(const auto& [n, e]: terrain.get_region(i).neighborhood) {
+                    if(!visited.contains(n) && !current.contains(n))
+                        next.insert(n);
+                }
+            }
+            current = next;
+        }
+    }
+
+    template <typename T, typename D>
+    TerrainField<T, D>::TerrainField(const Terrain& terrain,
+                                     const std::vector<std::size_t>& seeds,
+                                     const std::function<T(const Terrain& terrain, std::size_t)>& field)
+                                     : m_values(terrain.get_num_regions()) {
+        std::unordered_set<std::size_t> current{seeds.begin(), seeds.end()}, visited;
+        while(visited.size() < terrain.get_num_regions() && !current.empty()) {
+            std::unordered_set<std::size_t> next;
+            for(auto i: current) {
+                m_values[i] = field(terrain, i);
+                visited.insert(i);
+                for(const auto& [n, e]: terrain.get_region(i).neighborhood) {
+                    if(!visited.contains(n) && !current.contains(n))
+                        next.insert(n);
+                }
+            }
+            current = next;
+        }
+    }
+
+    template<typename T, typename D>
+    const T &TerrainField<T, D>::operator[](std::size_t index) const {
+        return m_values[index];
+    }
 } // namespace mapgen
