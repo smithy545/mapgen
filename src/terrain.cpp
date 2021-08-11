@@ -10,8 +10,10 @@
 #include <glm/glm.hpp>
 #include <glm/gtx/matrix_decompose.hpp>
 #include <limits>
+#include <nlohmann/json.hpp>
 #include <random>
 #include <stdexcept>
+#include <utils/file_util.h>
 #include <utils/math_util.h>
 #include <vector>
 
@@ -25,13 +27,16 @@ namespace mapgen {
                      unsigned int height,
                      unsigned int num_tectonic_plates,
                      float wind_direction)
-                     : Terrain(generate_sites(num_regions, width, height), num_tectonic_plates, wind_direction) {}
+                     : Terrain(generate_sites(num_regions, width, height),
+                               num_tectonic_plates,
+                               wind_direction) {}
 
     Terrain::Terrain(std::vector<double> site_coords, unsigned int num_tectonic_plates, float wind_direction)
     : m_delauney(site_coords) {
         assert(num_tectonic_plates > 0);
 
         m_voroni_sites = std::move(site_coords);
+        export_to_file("recent.json");
 
         // TODO: Lock region index to half of coord index? Wastes memory when regions become deletable or mutable
         for(std::size_t i = 0; i < m_voroni_sites.size(); i += 2)
@@ -86,7 +91,7 @@ namespace mapgen {
         for(auto i = m_delauney.hull_start; m_delauney.hull_next[i] != m_delauney.hull_start; i = m_delauney.hull_next[i])
             m_oceans.insert(i);
 
-        // assign sea levels (sea level = path length to nearest ocean tiles)
+        // assign sea levels (sea level = path length to map hull)
         std::unordered_set<std::size_t> added;
         std::unordered_set<std::size_t> layer;
         for (auto index: m_oceans) {
@@ -128,13 +133,14 @@ namespace mapgen {
             for (auto index : tectonic_regions) {
                 const auto &region = m_regions[index];
                 for (const auto& [n, edge]: region.neighborhood) {
+                    auto& neighbor = m_regions[n];
                     if (!added.contains(n)) {
-                        m_regions[n].terrain.tectonic_plate = region.terrain.tectonic_plate;
+                        neighbor.terrain.tectonic_plate = region.terrain.tectonic_plate;
                         added.insert(n);
                         next.insert(n);
                     } else if (!m_oceans.contains(n) // region can't be mountain and ocean
-                    && m_regions[n].terrain.tectonic_plate != region.terrain.tectonic_plate // mountains on tectonic plate boundaries
-                    && m_regions[n].terrain.sea_level > mountain_size + 2) // no mountains on beach
+                    && neighbor.terrain.tectonic_plate != region.terrain.tectonic_plate // mountains on plate boundaries
+                    && neighbor.terrain.sea_level > mountain_size + 2) // no mountains on beach
                         m_mountains.insert(n);
                 }
             }
@@ -151,18 +157,15 @@ namespace mapgen {
                 region.terrain.elevation = 1.0;
                 region.terrain.humidity = 0.0;
             } else {
-                float f = region.terrain.sea_level/(level - 1.0f);
-                region.terrain.elevation = f;
-                region.terrain.humidity = 1.0f - f;
-                continue;
                 int path_length;
                 find_nearest_mountain_face(i, path_length);
                 if (path_length > mountain_size)
-                    region.terrain.elevation = (0.2f * region.terrain.sea_level) / level;
+                    region.terrain.elevation = (0.2f * region.terrain.sea_level) / (level - 1.f);
                 else {
                     auto d = (10.0 * (path_length - 1)) / mountain_size;
                     region.terrain.elevation = 0.8f / glm::log(d + glm::exp(1));
                 }
+                region.terrain.humidity = 1.0 - region.terrain.elevation;
             }
         }
 
@@ -276,7 +279,7 @@ namespace mapgen {
             layer.insert(n);
         auto found{index};
         int path_distance{0};
-        while(found == index && searched.size() < m_regions.size() && layer.empty()) {
+        while(found == index && searched.size() < m_regions.size()) {
             path_distance++;
             std::unordered_set<std::size_t> next;
             for (auto i: layer) {
@@ -417,6 +420,14 @@ namespace mapgen {
             coords.push_back(v.y);
         }
         return coords;
+    }
+
+    void Terrain::export_to_file(const std::string& filename) {
+        json data;
+        data["num_sites"] = m_voroni_sites.size()/2;
+        for(auto v: m_voroni_sites)
+            data["site_coords"].push_back(v);
+        utils::file::write_json_file("/civilwar/res/" + filename, data);
     }
 
 } // namespace mapgen

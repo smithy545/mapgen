@@ -68,8 +68,10 @@ namespace mapgen {
         [[nodiscard]]
         std::vector<glm::vec3> get_mouse_terrain_collision_triangle(float x, float y, const RenderContext& context) const;
 
+        void export_to_file(const std::string& filename);
+
     private:
-        const float MOUNTAIN_HEIGHT{200};
+        const float MOUNTAIN_HEIGHT{300};
         const float EVAPORATION{0.3f};
         float m_wind_strength{0.1f}; // determines amount of evaporated moisture passing between neighboring regions
         float m_evaporation{0.1f};   // determines amount of moisture evaporating per region
