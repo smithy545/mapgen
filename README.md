@@ -7,10 +7,7 @@ A C++ version of the redblobgames Mapgen4 (https://www.redblobgames.com/maps/map
 #### Installation
 External libs used:
 
-
-https://www.cgal.org/
-
-https://github.com/RandyGaul/cute_headers
+https://github.com/bulletphysics/bullet3
 
 https://github.com/abellgithub/delaunator-cpp
 
