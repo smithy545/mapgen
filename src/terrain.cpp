@@ -9,6 +9,7 @@
 #include <engine/InstanceList.h>
 #include <glm/glm.hpp>
 #include <glm/gtx/matrix_decompose.hpp>
+#include <glm/gtx/projection.hpp>
 #include <limits>
 #include <nlohmann/json.hpp>
 #include <random>
@@ -16,6 +17,7 @@
 #include <utils/file_util.h>
 #include <utils/math_util.h>
 #include <vector>
+
 
 using namespace engine;
 using namespace utils::math;
@@ -34,13 +36,14 @@ namespace mapgen {
     : m_delauney(site_coords) {
         assert(num_tectonic_plates > 0);
 
-        m_voroni_sites = std::move(site_coords);
-        export_to_file("recent.json");
 
-        // TODO: Lock region index to half of coord index? Wastes memory when regions become deletable or mutable
+        // Make regions from site coords
+        m_voroni_sites = std::move(site_coords);
         for(std::size_t i = 0; i < m_voroni_sites.size(); i += 2)
             m_regions.push_back(Region{i});
 
+
+        // assign region relations/neighborhoods and generate voroni edges from delauney triangulation
         std::unordered_map<glm::vec2, std::unordered_set<std::size_t>> edge_to_sites;
         std::unordered_map<std::size_t, glm::vec2> site_to_edge;
         for (std::size_t i = 0; i < m_delauney.triangles.size(); i += 3) {
@@ -63,8 +66,8 @@ namespace mapgen {
         }
         for (const auto& [vert, neighbors]: edge_to_sites) {
             for(auto i: neighbors) {
+                std::size_t edge_index{m_voroni_edges.size()};
                 if (m_delauney.halfedges[i] == delaunator::INVALID_INDEX) {
-                    auto edge_index = m_voroni_edges.size();
                     RegionEdge edge{{vert, vert}};
                     m_voroni_edges.push_back(edge);
 
@@ -74,7 +77,6 @@ namespace mapgen {
                     m_regions[r1].neighborhood[r0] = edge_index;
                 } else if (i > m_delauney.halfedges[i]) {
                     const auto& next_vert = site_to_edge[m_delauney.halfedges[i]];
-                    auto edge_index = m_voroni_edges.size();
                     RegionEdge edge{{vert, next_vert}};
                     m_voroni_edges.push_back(edge);
 
@@ -85,38 +87,46 @@ namespace mapgen {
                 }
             }
         }
+        export_to_file("recent.json");
+
 
         // set ocean to hull of map
+        std::unordered_set<std::size_t> oceans;
         for(auto i = m_delauney.hull_start; m_delauney.hull_next[i] != m_delauney.hull_start; i = m_delauney.hull_next[i])
-            m_oceans.insert(i);
+            oceans.insert(i);
+        // assign ocean field (sea level = path length to map hull)
+        std::size_t ocean_field_max = 0;
+        m_ocean_field = std::make_shared<PathLengthField>(
+            *this,
+            std::vector<std::size_t>(oceans.begin(), oceans.end()),
+            [&ocean_field_max, &oceans](
+                    const PathLengthField& field,
+                    const Terrain& terrain,
+                    std::size_t index) {
+                if(oceans.contains(index))
+                    return PathStats{0, index, index};
 
-        // assign sea levels (sea level = path length to map hull)
-        std::unordered_set<std::size_t> added;
-        std::unordered_set<std::size_t> layer;
-        for (auto index: m_oceans) {
-            layer.insert(index);
-            added.insert(index);
-        }
-        auto level = 0;
-        do {
-            std::unordered_set<std::size_t> next_layer;
-            for (auto i: layer) {
-                auto &region = m_regions[i];
-                region.terrain.sea_level = level;
-                for (const auto& [n, edge]: region.neighborhood) {
-                    if (!added.contains(n)) {
-                        next_layer.insert(n);
-                        added.insert(n);
+                PathStats closest_ocean{INT_MAX, index, index};
+                for(const auto& [n, e]: terrain.get_region(index).neighborhood) {
+                    if(field.contains(n)) {
+                        auto ocean = field[n];
+                        if(ocean.length < closest_ocean.length) {
+                            closest_ocean.length = ocean.length;
+                            closest_ocean.origin = ocean.origin;
+                        }
                     }
                 }
+                closest_ocean.length += 1;
+                if(closest_ocean.length > ocean_field_max)
+                    ocean_field_max = closest_ocean.length;
+                return closest_ocean;
             }
-            layer = next_layer;
-            level++;
-        } while (!layer.empty());
+        );
+
 
         // randomly choose tectonic plate origins from faces
-        added.clear();
-        std::unordered_set<std::size_t> tectonic_regions;
+        std::unordered_set<std::size_t> mountains;
+        std::unordered_set<std::size_t> added, tectonic_regions;
         for (auto index = 0; index < m_regions.size(); index++) {
             m_regions[index].terrain.tectonic_plate = tectonic_regions.size();
             tectonic_regions.insert(index);
@@ -124,9 +134,10 @@ namespace mapgen {
             if(tectonic_regions.size() >= num_tectonic_plates)
                 break;
         }
-
         // assign terrain regions to tectonic plates and make mountains along plate boundaries
         int mountain_size = 2;
+        std::unordered_set<std::size_t> plate_regions;
+        std::unordered_set<std::size_t> plate_edges;
         while (added.size() < m_regions.size()) {
             std::unordered_set<std::size_t> next;
             for (auto index : tectonic_regions) {
@@ -137,86 +148,121 @@ namespace mapgen {
                         neighbor.terrain.tectonic_plate = region.terrain.tectonic_plate;
                         added.insert(n);
                         next.insert(n);
-                    } else if (!m_oceans.contains(n) // region can't be mountain and ocean
-                    && neighbor.terrain.tectonic_plate != region.terrain.tectonic_plate // mountains on plate boundaries
-                    && neighbor.terrain.sea_level > mountain_size + 2) // no mountains on beach
-                        m_mountains.insert(n);
+                    } else if (neighbor.terrain.tectonic_plate != region.terrain.tectonic_plate) {
+                        plate_edges.insert(edge);
+                        plate_regions.insert(index);
+                        plate_regions.insert(n);
+                        mountains.insert(n);
+                    }
                 }
             }
             tectonic_regions = next;
         }
-
         // field containing distance to nearest mountain
-        typedef std::pair<float, std::size_t> T;
-        TerrainField<T> mountain_field{
+        auto mountain_field_max = 0;
+        m_mountain_field = std::make_shared<PathLengthField>(
             *this,
-            std::vector<std::size_t>(m_mountains.begin(), m_mountains.end()),
-            [](const TerrainField<T>& field, const Terrain& terrain, std::size_t index) {
-                if(terrain.is_mountain(index))
-                    return std::pair<float, std::size_t>{0.0f, index};
+            std::vector<std::size_t>(mountains.begin(), mountains.end()),
+            [&mountain_field_max, &mountains](
+                    const PathLengthField& field,
+                    const Terrain& terrain,
+                    std::size_t index) {
+                if(mountains.contains(index))
+                    return PathStats{0, index, index};
 
-                std::pair<float, std::size_t> closest_mountain{std::numeric_limits<float>::infinity(), index};
+                PathStats closest_mountain{INT_MAX, index, index};
                 for(const auto& [n, e]: terrain.get_region(index).neighborhood) {
                     if(field.contains(n)) {
-                        auto i = field[n].second;
-                        auto d = glm::distance(terrain.site_at(n), terrain.site_at(index));
-                        if(d < closest_mountain.first) {
-                            closest_mountain.first = d;
-                            closest_mountain.second = i;
+                        auto mountain = field[n];
+                        if(mountain.length < closest_mountain.length) {
+                            closest_mountain.length = mountain.length;
+                            closest_mountain.origin = mountain.origin;
                         }
                     }
                 }
+                closest_mountain.length += 1;
+                if(closest_mountain.length > mountain_field_max)
+                    mountain_field_max = closest_mountain.length;
                 return closest_mountain;
             }
-        };
-
+        );
         // assign elevations based on distance from mountain or distance from ocean (whichever is closer)
         for (auto i = 0; i < m_regions.size(); i++) {
             auto& region = m_regions[i];
-            if (m_oceans.contains(i)) {
+            if (is_ocean(i)) {
                 region.terrain.elevation = 0.0;
-                region.terrain.humidity = 1.0;
-            } else if (m_mountains.contains(i)) {
+                region.terrain.precipitation = 1.0;
+            } else if (is_mountain(i)) {
                 region.terrain.elevation = 1.0;
-                region.terrain.humidity = 0.0;
+                region.terrain.precipitation = 0.0;
             } else {
-                auto closest_mountain = mountain_field[i];
-                auto distance = closest_mountain.first;
-                if (distance > mountain_size)
-                    region.terrain.elevation = (0.2f * region.terrain.sea_level) / (level - 1.f);
+                auto path_to_closest_mountain = (*m_mountain_field)[i];
+                auto path_to_closest_ocean = (*m_ocean_field)[i];
+                if (path_to_closest_mountain.length > mountain_size)
+                    region.terrain.elevation = (0.2 * path_to_closest_ocean.length) / ocean_field_max;
                 else {
-                    auto d = (10.0 * (distance - 1)) / mountain_size;
-                    region.terrain.elevation = 0.8f / glm::log(d + glm::exp(1));
+                    auto d = (10.0 * (path_to_closest_mountain.length - 1)) / mountain_size;
+                    region.terrain.elevation = 0.8 / glm::log(d + glm::exp(1));
                 }
-                region.terrain.humidity = 1.0 - region.terrain.elevation;
+                region.terrain.precipitation = 1.0f - region.terrain.elevation;
             }
         }
 
-        // wind
-        auto mountain_shadow = 3*mountain_size; // # of layers after the mountain cell affected by mountain
-        std::map<float, std::size_t> wind_projections;
-        for (auto i = 0; i < m_regions.size(); i++) {
-            break;
-            const auto& region = m_regions[i];
-            auto dx = glm::cos(wind_direction);
-            auto dy = glm::sin(wind_direction);
-            wind_projections[m_voroni_sites[i]*dx + m_voroni_sites[i+1]*dy] = i;
-        }
 
+        // order regions by projection along wind vector
+        glm::vec2 wind_vector(glm::cos(wind_direction), glm::sin(wind_direction));
+        std::map<float, std::size_t> wind_projections;
+        for (auto i = 0; i < m_regions.size(); i++)
+            wind_projections[m_voroni_sites[i]*wind_vector.x + m_voroni_sites[i+1]*wind_vector.y] = i;
+
+        std::vector<std::size_t> ordered_regions;
+        for(const auto& [projection, index]: wind_projections)
+            ordered_regions.push_back(index);
+
+        m_wind_field = std::make_shared<FlatVectorField>(
+            *this,
+            ordered_regions,
+            [&](
+                    const TerrainField<glm::vec2>& field,
+                    const Terrain& terrain,
+                    std::size_t index) {
+                if(terrain.is_ocean(index)) // oceans are wind sources
+                    return wind_vector;
+                if(terrain.is_mountain(index)) // mountains are wind sinks/breakers
+                    return glm::vec2(0,0);
+
+                glm::vec2 wind_direction(0,0);
+                float num_neighbors = 0;
+                for(const auto& [n, e]: terrain.get_region(index).neighborhood) {
+                    if(field.contains(n)) {
+                        auto dv = glm::normalize(terrain.site_at(index) - terrain.site_at(n));
+                        wind_direction += glm::proj(dv, field[n]);
+                        num_neighbors += 1;
+                    }
+                }
+                wind_direction /= num_neighbors;
+                wind_direction += wind_vector * m_wind_strength; // constant wind everywhere
+                return wind_direction;
+            }
+        );
+
+
+        // assign precipitation/humidity
+        auto mountain_shadow = 3*mountain_size; // # of layers after the mountain cell affected by mountain
         for (auto [wind_projection, i]: wind_projections) {
             break;
             auto& region = m_regions[i];
-            if (m_oceans.contains(region.coord_index) || m_mountains.contains(region.coord_index))
+            if (is_ocean(region.coord_index) || is_mountain(region.coord_index))
                 continue;
             int path_length;
-            auto mountain_region = m_regions[find_nearest_mountain_face(i, path_length)];
+            auto mountain_region = m_regions[(*m_mountain_field)[i].origin];
             auto mountain_site = site_at(mountain_region.coord_index);
             auto dx = glm::cos(wind_direction);
             auto dy = glm::sin(wind_direction);
             auto mountain_projection = dx*mountain_site.x + dy*mountain_site.y;
             if (path_length > mountain_size) {
-                if (path_length >= region.terrain.sea_level)
-                    region.terrain.humidity = 1.f;
+                if (path_length >= (*m_ocean_field)[i].length)
+                    region.terrain.precipitation = 1.f;
                 else if (wind_projection < mountain_projection || path_length > mountain_shadow) {
                     float area_humidity = 0.0;
                     auto count = 0;
@@ -225,15 +271,15 @@ namespace mapgen {
                         auto neighbor_site = site_at(neighbor.coord_index);
                         auto neighbor_projection = dx*neighbor_site.x + dy*neighbor_site.y;
                         if(neighbor_projection < wind_projection)
-                            area_humidity += EVAPORATION*neighbor.terrain.humidity;
+                            area_humidity += EVAPORATION*neighbor.terrain.precipitation;
                     }
                     area_humidity = std::min(1.0f, area_humidity);
-                    region.terrain.humidity = area_humidity;
+                    region.terrain.precipitation = area_humidity;
                 } else if (path_length < mountain_shadow) {
-                    region.terrain.humidity = 0.2f + 0.2f*path_length/mountain_shadow;
+                    region.terrain.precipitation = 0.2f + 0.2f*path_length/mountain_shadow;
                 }
             } else
-                region.terrain.humidity = 1.5f - region.terrain.elevation;
+                region.terrain.precipitation = 1.5f - region.terrain.elevation;
         }
     }
 
@@ -252,12 +298,12 @@ namespace mapgen {
                 const auto& terrain = m_regions[m_delauney.triangles[j]].terrain;
                 auto elevation = terrain.elevation;
                 auto color = ocean_color;
-                if (!m_oceans.contains(t)) {
+                if (!is_ocean(t)) {
                     elevation *= MOUNTAIN_HEIGHT;
-                    if(terrain.sea_level == 1 || terrain.humidity < .3)
+                    if(terrain.precipitation < .3)
                         color = desert_color;
                     else
-                        color = grassland_color * terrain.humidity;
+                        color = grassland_color * terrain.precipitation;
                     if (elevation > .6f * MOUNTAIN_HEIGHT)
                         color = mountain_color;
                     if (elevation >= .9f * MOUNTAIN_HEIGHT)
@@ -286,44 +332,6 @@ namespace mapgen {
         });
 
         return m_entity;
-    }
-
-    std::size_t Terrain::find_nearest_mountain_face(std::size_t index, int& path_length) {
-        assert(!m_mountains.empty());
-        if(m_mountains.contains(index))
-            return index;
-        std::unordered_set<std::size_t> layer;
-        std::unordered_set<std::size_t> searched{index};
-        auto min_distance = std::numeric_limits<double>::infinity();
-        const auto& start_region = m_regions[index];
-        for(const auto& [n, edge]: start_region.neighborhood)
-            layer.insert(n);
-        auto found{index};
-        int path_distance{0};
-        while(found == index && searched.size() < m_regions.size()) {
-            path_distance++;
-            std::unordered_set<std::size_t> next;
-            for (auto i: layer) {
-                if (m_mountains.contains(i)) {
-                    auto distance = glm::distance(
-                            site_at(m_regions[i].coord_index),
-                            site_at(start_region.coord_index));
-                    if (distance < min_distance) {
-                        found = i;
-                        min_distance = distance;
-                    }
-                } else {
-                    for(const auto& [n, edge]: m_regions[i].neighborhood) {
-                        if(!searched.contains(n))
-                            next.insert(n);
-                    }
-                }
-                searched.insert(i);
-            }
-            layer = next;
-        }
-        path_length = path_distance;
-        return found;
     }
 
     glm::vec3 Terrain::get_mouse_terrain_collision_point(float x, float y, const RenderContext& context) const {
@@ -448,71 +456,55 @@ namespace mapgen {
         data["num_sites"] = m_voroni_sites.size()/2;
         for(auto v: m_voroni_sites)
             data["site_coords"].push_back(v);
-        utils::file::write_json_file("/civilwar/res/" + filename, data);
+        utils::file::write_json_file("/Users/philipsmith/CLionProjects/civilwar/res/" + filename, data);
     }
 
-    template<typename ValueType, typename SharedDataType>
-    TerrainField<ValueType, SharedDataType>::TerrainField(const Terrain &terrain, SharedDataType &initial,
-                                                          const std::vector<std::size_t> &seeds,
-                                                          const std::function<ValueType(const TerrainField &,
-                                                                                        const Terrain &,
-                                                                                        SharedDataType &,
-                                                                                        std::size_t)> &field,
-                                                          const std::function<bool(const TerrainField &,
-                                                                                   const Terrain &,
-                                                                                   SharedDataType &,
-                                                                                   std::size_t)>& predicate) {
-        std::unordered_set<std::size_t> current{seeds.begin(), seeds.end()}, visited;
-        while(visited.size() < terrain.get_num_regions() && !current.empty()) {
-            std::unordered_set<std::size_t> next;
-            for(auto i: current) {
-                m_values[i] = field(*this, terrain, initial, i);
-                visited.insert(i);
-                for(const auto& [n, e]: terrain.get_region(i).neighborhood) {
-                    if(!visited.contains(n) && !current.contains(n) && predicate(this, terrain, initial, n))
-                        next.insert(n);
-                }
-            }
-            current = next;
-        }
+    bool Terrain::is_mountain(std::size_t index) const {
+        return m_mountain_field->contains(index) && (*m_mountain_field)[index].length == 0;
     }
 
-    template <typename T, typename D>
-    TerrainField<T, D>::TerrainField(const Terrain& terrain,
-                                     D& initial,
-                                     const std::vector<std::size_t>& seeds,
-                                     const std::function<T(const TerrainField&,
-                                                           const Terrain& terrain,
-                                                           D&, std::size_t)>& field) {
-        std::unordered_set<std::size_t> current{seeds.begin(), seeds.end()}, visited;
-        while(visited.size() < terrain.get_num_regions() && !current.empty()) {
-            std::unordered_set<std::size_t> next;
-            for(auto i: current) {
-                m_values[i] = field(*this, terrain, initial, i);
-                visited.insert(i);
-                for(const auto& [n, e]: terrain.get_region(i).neighborhood) {
-                    if(!visited.contains(n) && !current.contains(n))
-                        next.insert(n);
-                }
-            }
-            current = next;
-        }
+    bool Terrain::is_ocean(std::size_t index) const {
+        return m_ocean_field->contains(index) && (*m_ocean_field)[index].length == 0;
     }
 
-    template <typename T, typename D>
-    TerrainField<T, D>::TerrainField(const Terrain& terrain,
-                                     const std::vector<std::size_t>& seeds,
-                                     const std::function<T(const TerrainField&,
-                                                           const Terrain& terrain,
-                                                           std::size_t)>& field) {
-        std::unordered_set<std::size_t> current{seeds.begin(), seeds.end()}, visited;
-        while(visited.size() < terrain.get_num_regions() && !current.empty()) {
+    template<typename T>
+    TerrainField<T>::TerrainField(const Terrain &terrain,
+                                      const std::vector<std::size_t> &seeds,
+                                      const std::function<T(const TerrainField &,
+                                                            const Terrain &,
+                                                            std::size_t)> &field,
+                                      const std::function<bool(const TerrainField &,
+                                                           const Terrain &,
+                                                           std::size_t)> &predicate) {
+        assert(!seeds.empty());
+        std::unordered_set<std::size_t> current{seeds.begin(), seeds.end()};
+        while(m_values.size() < terrain.get_num_regions() && !current.empty()) {
             std::unordered_set<std::size_t> next;
             for(auto i: current) {
                 m_values[i] = field(*this, terrain, i);
-                visited.insert(i);
                 for(const auto& [n, e]: terrain.get_region(i).neighborhood) {
-                    if(!visited.contains(n) && !current.contains(n))
+                    if(!current.contains(n) && !m_values.contains(n) && predicate(this, terrain, n))
+                        next.insert(n);
+                }
+            }
+            current = next;
+        }
+    }
+
+    template <typename T>
+    TerrainField<T>::TerrainField(const Terrain& terrain,
+                                     const std::vector<std::size_t> &seeds,
+                                     const std::function<T(const TerrainField&,
+                                                           const Terrain& terrain,
+                                                           std::size_t)> &field) {
+        assert(!seeds.empty());
+        std::unordered_set<std::size_t> current{seeds.begin(), seeds.end()};
+        while(m_values.size() < terrain.get_num_regions()) {
+            std::unordered_set<std::size_t> next;
+            for(auto i: current) {
+                m_values[i] = field(*this, terrain, i);
+                for(const auto& [n, e]: terrain.get_region(i).neighborhood) {
+                    if(!current.contains(n) && !m_values.contains(n))
                         next.insert(n);
                 }
             }
