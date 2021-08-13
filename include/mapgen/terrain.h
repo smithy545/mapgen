@@ -127,14 +127,18 @@ namespace mapgen {
         }
 
         [[nodiscard]] inline glm::vec2 site_at(std::size_t index) const {
-            return {m_voroni_sites[index], m_voroni_sites[index + 1]};
+            auto i = m_regions[index].coord_index;
+            return {m_voroni_sites[i], m_voroni_sites[i + 1]};
+        }
+
+        [[nodiscard]] inline glm::vec2 site_at(const Region& region) const {
+            return {m_voroni_sites[region.coord_index], m_voroni_sites[region.coord_index + 1]};
         }
 
     private:
         const float MOUNTAIN_HEIGHT{200};
-        const float EVAPORATION{0.3f};
-        float m_wind_strength{0.1f}; // determines amount of evaporated moisture passing between neighboring regions
-        float m_evaporation{0.1f};   // determines amount of moisture evaporating per region
+        float m_wind_strength{0.1f}; // determines strength of wind vector
+        float m_evaporation{0.8f};   // determines amount of moisture evaporating per region
         PathLengthField::Ptr m_mountain_field{nullptr};
         PathLengthField::Ptr m_ocean_field{nullptr};
         FlatVectorField::Ptr m_wind_field{nullptr};

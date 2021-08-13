@@ -42,7 +42,6 @@ namespace mapgen {
         for(std::size_t i = 0; i < m_voroni_sites.size(); i += 2)
             m_regions.push_back(Region{i});
 
-
         // assign region relations/neighborhoods and generate voroni edges from delauney triangulation
         std::unordered_map<glm::vec2, std::unordered_set<std::size_t>> edge_to_sites;
         std::unordered_map<std::size_t, glm::vec2> site_to_edge;
@@ -87,13 +86,13 @@ namespace mapgen {
                 }
             }
         }
-        export_to_file("recent.json");
 
 
         // set ocean to hull of map
         std::unordered_set<std::size_t> oceans;
         for(auto i = m_delauney.hull_start; m_delauney.hull_next[i] != m_delauney.hull_start; i = m_delauney.hull_next[i])
             oceans.insert(i);
+
         // assign ocean field (sea level = path length to map hull)
         std::size_t ocean_field_max = 0;
         m_ocean_field = std::make_shared<PathLengthField>(
@@ -125,7 +124,6 @@ namespace mapgen {
 
 
         // randomly choose tectonic plate origins from faces
-        std::unordered_set<std::size_t> mountains;
         std::unordered_set<std::size_t> added, tectonic_regions;
         for (auto index = 0; index < m_regions.size(); index++) {
             m_regions[index].terrain.tectonic_plate = tectonic_regions.size();
@@ -134,10 +132,10 @@ namespace mapgen {
             if(tectonic_regions.size() >= num_tectonic_plates)
                 break;
         }
+
         // assign terrain regions to tectonic plates and make mountains along plate boundaries
-        int mountain_size = 2;
-        std::unordered_set<std::size_t> plate_regions;
-        std::unordered_set<std::size_t> plate_edges;
+        int mountain_size = 2; // number of adjacent region layers considered part of mountain
+        std::unordered_set<std::size_t> mountains, plate_regions, plate_edges;
         while (added.size() < m_regions.size()) {
             std::unordered_set<std::size_t> next;
             for (auto index : tectonic_regions) {
@@ -158,6 +156,7 @@ namespace mapgen {
             }
             tectonic_regions = next;
         }
+
         // field containing distance to nearest mountain
         auto mountain_field_max = 0;
         m_mountain_field = std::make_shared<PathLengthField>(
@@ -186,39 +185,31 @@ namespace mapgen {
                 return closest_mountain;
             }
         );
-        // assign elevations based on distance from mountain or distance from ocean (whichever is closer)
+
+        // order regions by projection along wind vector so regions only affect other regions downwind
+        glm::vec2 wind_vector(glm::cos(wind_direction), glm::sin(wind_direction));
+        std::vector<std::size_t> ordered_regions;
+        std::map<float, std::vector<std::size_t>> wind_projections;
         for (auto i = 0; i < m_regions.size(); i++) {
             auto& region = m_regions[i];
+            wind_projections[
+                    m_voroni_sites[region.coord_index]*wind_vector.x +
+                    m_voroni_sites[region.coord_index+1]*wind_vector.y].push_back(i);
+            // assign fixed ocean and mountain elevation/precipitation
             if (is_ocean(i)) {
                 region.terrain.elevation = 0.0;
                 region.terrain.precipitation = 1.0;
             } else if (is_mountain(i)) {
                 region.terrain.elevation = 1.0;
                 region.terrain.precipitation = 0.0;
-            } else {
-                auto path_to_closest_mountain = (*m_mountain_field)[i];
-                auto path_to_closest_ocean = (*m_ocean_field)[i];
-                if (path_to_closest_mountain.length > mountain_size)
-                    region.terrain.elevation = (0.2 * path_to_closest_ocean.length) / ocean_field_max;
-                else {
-                    auto d = (10.0 * (path_to_closest_mountain.length - 1)) / mountain_size;
-                    region.terrain.elevation = 0.8 / glm::log(d + glm::exp(1));
-                }
-                region.terrain.precipitation = 1.0f - region.terrain.elevation;
             }
         }
+        for(const auto& [projection, indices]: wind_projections) {
+            for(auto i: indices)
+                ordered_regions.push_back(i);
+        }
 
-
-        // order regions by projection along wind vector
-        glm::vec2 wind_vector(glm::cos(wind_direction), glm::sin(wind_direction));
-        std::map<float, std::size_t> wind_projections;
-        for (auto i = 0; i < m_regions.size(); i++)
-            wind_projections[m_voroni_sites[i]*wind_vector.x + m_voroni_sites[i+1]*wind_vector.y] = i;
-
-        std::vector<std::size_t> ordered_regions;
-        for(const auto& [projection, index]: wind_projections)
-            ordered_regions.push_back(index);
-
+        // generate wind vector field based on terrain
         m_wind_field = std::make_shared<FlatVectorField>(
             *this,
             ordered_regions,
@@ -233,54 +224,55 @@ namespace mapgen {
 
                 glm::vec2 wind_direction(0,0);
                 float num_neighbors = 0;
+                auto site = terrain.site_at(index);
                 for(const auto& [n, e]: terrain.get_region(index).neighborhood) {
-                    if(field.contains(n)) {
-                        auto dv = glm::normalize(terrain.site_at(index) - terrain.site_at(n));
+                    if(field.contains(n) && glm::length(field[n]) > 0) {
+                        auto dv = glm::normalize(site - terrain.site_at(n));
                         wind_direction += glm::proj(dv, field[n]);
                         num_neighbors += 1;
                     }
                 }
-                wind_direction /= num_neighbors;
+                if(num_neighbors > 0)
+                    wind_direction /= num_neighbors;
                 wind_direction += wind_vector * m_wind_strength; // constant wind everywhere
                 return wind_direction;
             }
         );
 
-
-        // assign precipitation/humidity
-        auto mountain_shadow = 3*mountain_size; // # of layers after the mountain cell affected by mountain
-        for (auto [wind_projection, i]: wind_projections) {
-            break;
-            auto& region = m_regions[i];
-            if (is_ocean(region.coord_index) || is_mountain(region.coord_index))
+        // assign elevations and precipitation using generated terrain fields
+        for (auto i: ordered_regions) {
+            if(is_mountain(i) || is_ocean(i))
                 continue;
-            int path_length;
-            auto mountain_region = m_regions[(*m_mountain_field)[i].origin];
-            auto mountain_site = site_at(mountain_region.coord_index);
-            auto dx = glm::cos(wind_direction);
-            auto dy = glm::sin(wind_direction);
-            auto mountain_projection = dx*mountain_site.x + dy*mountain_site.y;
-            if (path_length > mountain_size) {
-                if (path_length >= (*m_ocean_field)[i].length)
-                    region.terrain.precipitation = 1.f;
-                else if (wind_projection < mountain_projection || path_length > mountain_shadow) {
-                    float area_humidity = 0.0;
-                    auto count = 0;
-                    for (const auto& [n, edge]: region.neighborhood) {
-                        auto neighbor = m_regions[n];
-                        auto neighbor_site = site_at(neighbor.coord_index);
-                        auto neighbor_projection = dx*neighbor_site.x + dy*neighbor_site.y;
-                        if(neighbor_projection < wind_projection)
-                            area_humidity += EVAPORATION*neighbor.terrain.precipitation;
-                    }
-                    area_humidity = std::min(1.0f, area_humidity);
-                    region.terrain.precipitation = area_humidity;
-                } else if (path_length < mountain_shadow) {
-                    region.terrain.precipitation = 0.2f + 0.2f*path_length/mountain_shadow;
-                }
-            } else
-                region.terrain.precipitation = 1.5f - region.terrain.elevation;
+            auto& region = m_regions[i];
+            auto path_to_closest_mountain = (*m_mountain_field)[i];
+            auto path_to_closest_ocean = (*m_ocean_field)[i];
+            if (path_to_closest_mountain.length > mountain_size)
+                region.terrain.elevation = (0.2 * path_to_closest_ocean.length) / ocean_field_max;
+            else {
+                auto d = (10.0 * (path_to_closest_mountain.length - 1)) / mountain_size;
+                region.terrain.elevation = 0.8 / glm::log(d + glm::exp(1));
+            }
+
+            // assign precipitation based on neighbors evaporation
+            float area_humidity{0};
+            auto site = site_at(i);
+            auto wind_projection = wind_vector.x*site.x + wind_vector.y*site.y;
+            for (const auto& [n, edge]: region.neighborhood) {
+                const auto& neighbor = m_regions[n];
+                auto neighbor_site = site_at(neighbor);
+                auto neighbor_projection = wind_vector.x*neighbor_site.x + wind_vector.y*neighbor_site.y;
+                if(wind_projection > neighbor_projection)
+                    area_humidity += m_evaporation * neighbor.terrain.precipitation;
+            }
+            // normalize to 0-1
+            if(area_humidity < .01f)
+                area_humidity = 0;
+            else if(area_humidity > 1.f)
+                area_humidity = 1;
+            region.terrain.precipitation = area_humidity;
         }
+
+        export_to_file("recent.json");
     }
 
     entt::entity Terrain::register_mesh(entt::registry &registry) {
@@ -288,29 +280,26 @@ namespace mapgen {
 
         Mesh mesh;
         auto ocean_color = glm::vec3(0, 0, 1);
-        auto desert_color = glm::vec3(251, 225, 182)/255.f;
+        auto desert_color = glm::vec3(193, 154, 107)/255.f;
         auto grassland_color = glm::vec3(83, 91, 41)/255.f;
         auto mountain_color = glm::vec3(.6, .6, .6);
         auto mountain_top_color = glm::vec3(1, 1, 1);
         for (std::size_t i = 0; i < m_delauney.triangles.size(); i += 3) {
             for(auto j = i; j < i + 3; j++) {
                 auto t = m_delauney.triangles[j];
-                const auto& terrain = m_regions[m_delauney.triangles[j]].terrain;
-                auto elevation = terrain.elevation;
+                const auto& terrain = m_regions[t].terrain;
                 auto color = ocean_color;
-                if (!is_ocean(t)) {
-                    elevation *= MOUNTAIN_HEIGHT;
-                    if(terrain.precipitation < .3)
+                if(is_mountain(t))
+                    color = mountain_top_color;
+                else if (!is_ocean(t)) {
+                    if (terrain.elevation >= .6f)
+                        color = mountain_color;
+                    else if(terrain.precipitation < .1f)
                         color = desert_color;
                     else
-                        color = grassland_color * terrain.precipitation;
-                    if (elevation > .6f * MOUNTAIN_HEIGHT)
-                        color = mountain_color;
-                    if (elevation >= .9f * MOUNTAIN_HEIGHT)
-                        color = mountain_top_color;
+                        color = grassland_color;
                 }
-
-                mesh.vertices.emplace_back(m_voroni_sites[2*t], elevation, m_voroni_sites[2*t + 1]);
+                mesh.vertices.emplace_back(m_voroni_sites[2*t], terrain.elevation * MOUNTAIN_HEIGHT, m_voroni_sites[2*t + 1]);
                 mesh.colors.push_back(color);
                 mesh.indices.push_back(j);
             }
@@ -478,12 +467,14 @@ namespace mapgen {
                                                            std::size_t)> &predicate) {
         assert(!seeds.empty());
         std::unordered_set<std::size_t> current{seeds.begin(), seeds.end()};
-        while(m_values.size() < terrain.get_num_regions() && !current.empty()) {
+        while(!current.empty()) {
             std::unordered_set<std::size_t> next;
             for(auto i: current) {
                 m_values[i] = field(*this, terrain, i);
                 for(const auto& [n, e]: terrain.get_region(i).neighborhood) {
-                    if(!current.contains(n) && !m_values.contains(n) && predicate(this, terrain, n))
+                    // only checking against the predicate allows for more complex field assignment (e.g. applying the
+                    // field operator to a region multiple times) but also high risk of infinite loops when not careful
+                    if(predicate(this, terrain, n))
                         next.insert(n);
                 }
             }
