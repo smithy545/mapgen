@@ -137,11 +137,9 @@ namespace mapgen {
 
     private:
         const float MOUNTAIN_HEIGHT{200};
-        float m_wind_strength{0.1f}; // determines strength of wind vector
         float m_evaporation{0.8f};   // determines amount of moisture evaporating per region
         PathLengthField::Ptr m_mountain_field{nullptr};
         PathLengthField::Ptr m_ocean_field{nullptr};
-        FlatVectorField::Ptr m_wind_field{nullptr};
         std::shared_ptr<btBvhTriangleMeshShape> m_shape{nullptr};
         std::shared_ptr<btCollisionObject> m_body{nullptr};
         std::shared_ptr<btTriangleMesh> m_bullet_mesh{nullptr};

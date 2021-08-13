@@ -209,36 +209,6 @@ namespace mapgen {
                 ordered_regions.push_back(i);
         }
 
-        // generate wind vector field based on terrain
-        m_wind_field = std::make_shared<FlatVectorField>(
-            *this,
-            ordered_regions,
-            [&](
-                    const TerrainField<glm::vec2>& field,
-                    const Terrain& terrain,
-                    std::size_t index) {
-                if(terrain.is_ocean(index)) // oceans are wind sources
-                    return wind_vector;
-                if(terrain.is_mountain(index)) // mountains are wind sinks/breakers
-                    return glm::vec2(0,0);
-
-                glm::vec2 wind_direction(0,0);
-                float num_neighbors = 0;
-                auto site = terrain.site_at(index);
-                for(const auto& [n, e]: terrain.get_region(index).neighborhood) {
-                    if(field.contains(n) && glm::length(field[n]) > 0) {
-                        auto dv = glm::normalize(site - terrain.site_at(n));
-                        wind_direction += glm::proj(dv, field[n]);
-                        num_neighbors += 1;
-                    }
-                }
-                if(num_neighbors > 0)
-                    wind_direction /= num_neighbors;
-                wind_direction += wind_vector * m_wind_strength; // constant wind everywhere
-                return wind_direction;
-            }
-        );
-
         // assign elevations and precipitation using generated terrain fields
         for (auto i: ordered_regions) {
             if(is_mountain(i) || is_ocean(i))
@@ -247,10 +217,10 @@ namespace mapgen {
             auto path_to_closest_mountain = (*m_mountain_field)[i];
             auto path_to_closest_ocean = (*m_ocean_field)[i];
             if (path_to_closest_mountain.length > mountain_size)
-                region.terrain.elevation = (0.2 * path_to_closest_ocean.length) / ocean_field_max;
+                region.terrain.elevation = (0.2f * path_to_closest_ocean.length) / ocean_field_max;
             else {
                 auto d = (10.0 * (path_to_closest_mountain.length - 1)) / mountain_size;
-                region.terrain.elevation = 0.8 / glm::log(d + glm::exp(1));
+                region.terrain.elevation = 0.8f / glm::log(d + glm::exp(1));
             }
 
             // assign precipitation based on neighbors evaporation
@@ -261,7 +231,7 @@ namespace mapgen {
                 const auto& neighbor = m_regions[n];
                 auto neighbor_site = site_at(neighbor);
                 auto neighbor_projection = wind_vector.x*neighbor_site.x + wind_vector.y*neighbor_site.y;
-                if(wind_projection > neighbor_projection)
+                if(wind_projection > neighbor_projection || is_ocean(n))
                     area_humidity += m_evaporation * neighbor.terrain.precipitation;
             }
             // normalize to 0-1
@@ -282,6 +252,7 @@ namespace mapgen {
         auto ocean_color = glm::vec3(0, 0, 1);
         auto desert_color = glm::vec3(193, 154, 107)/255.f;
         auto grassland_color = glm::vec3(83, 91, 41)/255.f;
+        auto d2g = grassland_color - desert_color;
         auto mountain_color = glm::vec3(.6, .6, .6);
         auto mountain_top_color = glm::vec3(1, 1, 1);
         for (std::size_t i = 0; i < m_delauney.triangles.size(); i += 3) {
@@ -294,10 +265,8 @@ namespace mapgen {
                 else if (!is_ocean(t)) {
                     if (terrain.elevation >= .6f)
                         color = mountain_color;
-                    else if(terrain.precipitation < .1f)
-                        color = desert_color;
                     else
-                        color = grassland_color;
+                        color = desert_color + d2g*terrain.precipitation;
                 }
                 mesh.vertices.emplace_back(m_voroni_sites[2*t], terrain.elevation * MOUNTAIN_HEIGHT, m_voroni_sites[2*t + 1]);
                 mesh.colors.push_back(color);
