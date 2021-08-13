@@ -146,7 +146,8 @@ namespace mapgen {
                         neighbor.terrain.tectonic_plate = region.terrain.tectonic_plate;
                         added.insert(n);
                         next.insert(n);
-                    } else if (neighbor.terrain.tectonic_plate != region.terrain.tectonic_plate) {
+                    } else if (neighbor.terrain.tectonic_plate != region.terrain.tectonic_plate
+                    && (*m_ocean_field)[n].length >= mountain_size + 2) {
                         plate_edges.insert(edge);
                         plate_regions.insert(index);
                         plate_regions.insert(n);
