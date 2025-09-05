@@ -18,11 +18,3 @@ https://github.com/fmtlib/fmt
 https://www.glfw.org/
 
 https://glm.g-truc.net/0.9.9/index.html
-
-
-#### Todo
-- Write river pathing
-- Write vegetation generation
-- Wind?
-- Code cleanup (lol)
-
